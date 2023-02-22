@@ -8,20 +8,22 @@ use std::time::Duration;
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct BenchConfig {
-    pub sst_path: String,
+    pub parquet_path: String,
     #[serde(with = "humantime_serde")]
     pub measurement_time: Duration,
     pub sample_size: usize,
     pub scan_batch_size: usize,
+    pub print_metrics: bool,
 }
 
 impl Default for BenchConfig {
     fn default() -> BenchConfig {
         BenchConfig {
-            sst_path: "".to_string(),
+            parquet_path: "".to_string(),
             measurement_time: Duration::from_secs(30),
             sample_size: 30,
             scan_batch_size: 1024,
+            print_metrics: false,
         }
     }
 }

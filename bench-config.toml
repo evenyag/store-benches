@@ -1,2 +1,2 @@
-sst_path = "data-example/cpu-1k.parquet"
+parquet_path = "data-example/cpu-1k.parquet"
 
