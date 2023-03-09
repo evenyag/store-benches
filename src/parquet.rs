@@ -1,8 +1,9 @@
 //! Parquet benches.
 
-use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::fs::File;
 use std::time::{Duration, Instant};
+
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
 #[derive(Debug)]
 pub struct Metrics {

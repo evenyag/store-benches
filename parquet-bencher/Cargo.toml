@@ -1,0 +1,18 @@
+[package]
+name = "parquet-bencher"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "parquet-bencher"
+path = "src/main.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+arrow-array = "34"
+parquet = "34"
+toml = "0.7"
+serde = { version = "1", features = ["derive"] }
+tempfile = "3.4"
+clap = { version = "4.1", features = ["derive"] }

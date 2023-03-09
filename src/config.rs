@@ -1,9 +1,10 @@
 //! Benchmark configs.
 
-use serde::Deserialize;
 use std::fs::File;
 use std::io::Read;
 use std::time::Duration;
+
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
