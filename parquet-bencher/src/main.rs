@@ -8,7 +8,6 @@ use crate::bench_result::Metrics;
 use crate::parameter::Parameter;
 use clap::Parser;
 
-
 mod bench_result;
 mod errors;
 mod parameter;

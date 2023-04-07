@@ -15,6 +15,8 @@ pub struct BenchConfig {
     pub sample_size: usize,
     pub scan_batch_size: usize,
     pub print_metrics: bool,
+    /// Index of columns to read, empty for all columns.
+    pub columns: Vec<usize>,
 }
 
 impl Default for BenchConfig {
@@ -25,6 +27,7 @@ impl Default for BenchConfig {
             sample_size: 30,
             scan_batch_size: 1024,
             print_metrics: false,
+            columns: Vec::new(),
         }
     }
 }

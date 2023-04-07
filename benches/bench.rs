@@ -2,7 +2,7 @@ use criterion::*;
 use store_benches::config::BenchConfig;
 use store_benches::parquet::ParquetBench;
 
-const CONFIG_PATH: &str = "bench-config.toml";
+const CONFIG_PATH: &str = "./bench-config.toml";
 
 struct BenchContext {
     print_metrics: bool,
@@ -31,7 +31,8 @@ fn bench_parquet(c: &mut Criterion) {
     group.measurement_time(config.measurement_time);
     group.sample_size(config.sample_size);
 
-    let bench = ParquetBench::new(config.parquet_path.clone(), config.scan_batch_size);
+    let bench = ParquetBench::new(config.parquet_path.clone(), config.scan_batch_size)
+        .with_columns(config.columns.clone());
     let ctx = BenchContext {
         print_metrics: config.print_metrics,
     };
