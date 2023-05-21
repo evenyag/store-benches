@@ -9,6 +9,7 @@ edition = "2021"
 members = [
     "parquet-bencher"
 ]
+
 [dependencies]
 humantime-serde = "1"
 parquet = "34"
