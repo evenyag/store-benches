@@ -1,6 +1,6 @@
 use criterion::*;
-use store_benches::config::BenchConfig;
-use store_benches::parquet::ParquetBench;
+use parquet_bencher::config::BenchConfig;
+use parquet_bencher::parquet_bench::ParquetBench;
 
 const CONFIG_PATH: &str = "./bench-config.toml";
 

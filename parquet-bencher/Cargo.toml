@@ -1,18 +1,26 @@
 [package]
 name = "parquet-bencher"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [[bin]]
 name = "parquet-bencher"
-path = "src/main.rs"
+path = "bin/main.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-arrow-array = "34"
-parquet = "34"
-toml = "0.7"
-serde = { version = "1", features = ["derive"] }
+arrow-array.workspace = true
+humantime-serde.workspace = true
+parquet.workspace = true
+toml.workspace = true
+serde.workspace = true
 tempfile = "3.4"
 clap = { version = "4.1", features = ["derive"] }
+
+[dev-dependencies]
+criterion = "0.4"
+
+[[bench]]
+name = "bench"
+harness = false

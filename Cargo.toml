@@ -1,24 +1,20 @@
-[package]
-name = "store-benches"
-version = "0.1.0"
+[workspace.package]
+version = "0.4.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace]
 members = [
-    "parquet-bencher"
+    "engine-bencher",
+    "parquet-bencher",
 ]
 
-[dependencies]
+[workspace.dependencies]
+futures-util = "0.3"
 humantime-serde = "1"
-parquet = "34"
-serde = "1"
+arrow-array = "40"
+parquet = "40"
+serde = { version = "1", features = ["derive"] }
+tokio = "1"
 toml = "0.7"
-
-[dev-dependencies]
-criterion = "0.4"
-
-[[bench]]
-name = "bench"
-harness = false

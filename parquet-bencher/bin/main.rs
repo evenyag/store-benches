@@ -4,13 +4,9 @@ use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 use parquet::schema::types::ColumnPath;
 
-use crate::bench_result::Metrics;
-use crate::parameter::Parameter;
+use parquet_bencher::bench_result::Metrics;
+use parquet_bencher::parameter::Parameter;
 use clap::Parser;
-
-mod bench_result;
-mod errors;
-mod parameter;
 
 fn main() {
     let args = Args::parse();

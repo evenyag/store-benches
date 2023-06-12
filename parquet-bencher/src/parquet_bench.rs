@@ -1,4 +1,4 @@
-//! Parquet benches.
+//! Parquet benchmark.
 
 use std::fs::File;
 use std::time::{Duration, Instant};

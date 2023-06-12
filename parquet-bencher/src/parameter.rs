@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use parquet::basic::{Compression, Encoding};
+use parquet::basic::{Compression, Encoding, GzipLevel, BrotliLevel, ZstdLevel};
 use serde::{de, Deserialize, Serialize, Serializer};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -78,16 +78,16 @@ where
         Compression::UNCOMPRESSED
     } else if s.eq_ignore_ascii_case(&Compression::SNAPPY.to_string()) {
         Compression::SNAPPY
-    } else if s.eq_ignore_ascii_case(&Compression::GZIP.to_string()) {
-        Compression::GZIP
+    } else if s.eq_ignore_ascii_case(&Compression::GZIP(GzipLevel::default()).to_string()) {
+        Compression::GZIP(GzipLevel::default())
     } else if s.eq_ignore_ascii_case(&Compression::LZO.to_string()) {
         Compression::LZO
-    } else if s.eq_ignore_ascii_case(&Compression::BROTLI.to_string()) {
-        Compression::BROTLI
+    } else if s.eq_ignore_ascii_case(&Compression::BROTLI(BrotliLevel::default()).to_string()) {
+        Compression::BROTLI(BrotliLevel::default())
     } else if s.eq_ignore_ascii_case(&Compression::LZ4.to_string()) {
         Compression::LZ4
-    } else if s.eq_ignore_ascii_case(&Compression::ZSTD.to_string()) {
-        Compression::ZSTD
+    } else if s.eq_ignore_ascii_case(&Compression::ZSTD(ZstdLevel::default()).to_string()) {
+        Compression::ZSTD(ZstdLevel::default())
     } else if s.eq_ignore_ascii_case(&Compression::LZ4_RAW.to_string()) {
         Compression::LZ4_RAW
     } else {
