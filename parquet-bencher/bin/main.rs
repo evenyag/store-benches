@@ -1,12 +1,11 @@
 use arrow_array::RecordBatch;
+use clap::Parser;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use parquet::file::properties::WriterProperties;
 use parquet::schema::types::ColumnPath;
-
 use parquet_bencher::bench_result::Metrics;
 use parquet_bencher::parameter::Parameter;
-use clap::Parser;
 
 fn main() {
     let args = Args::parse();

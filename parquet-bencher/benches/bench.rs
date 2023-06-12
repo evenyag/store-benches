@@ -2,14 +2,16 @@ use criterion::*;
 use parquet_bencher::config::BenchConfig;
 use parquet_bencher::parquet_bench::ParquetBench;
 
-const CONFIG_PATH: &str = "./bench-config.toml";
+const BENCH_CONFIG_KEY: &str = "BENCH_CONFIG";
 
 struct BenchContext {
     print_metrics: bool,
 }
 
 fn init_bench() -> BenchConfig {
-    BenchConfig::parse_toml(CONFIG_PATH)
+    let config_path = std::env::var(BENCH_CONFIG_KEY)
+        .expect("Please specify the path to the config file in env 'BENCH_CONFIG'");
+    BenchConfig::parse_toml(&config_path)
 }
 
 fn bench_parquet_iter(b: &mut Bencher<'_>, bench: &(ParquetBench, BenchContext)) {

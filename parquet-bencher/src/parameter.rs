@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use parquet::basic::{Compression, Encoding, GzipLevel, BrotliLevel, ZstdLevel};
+use parquet::basic::{BrotliLevel, Compression, Encoding, GzipLevel, ZstdLevel};
 use serde::{de, Deserialize, Serialize, Serializer};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
