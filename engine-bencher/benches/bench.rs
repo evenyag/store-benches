@@ -122,7 +122,7 @@ fn bench_full_scan(c: &mut Criterion) {
     group.measurement_time(config.measurement_time);
     group.sample_size(config.sample_size);
 
-    let parquet_path = config.parquet_path.clone();
+    let parquet_path = config.scan.path.clone();
     let ctx = BenchContext::new(config);
     let scan_bench = ctx.runtime.block_on(async {
         let mut scan_bench = ctx.new_scan_bench().await;
