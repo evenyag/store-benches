@@ -21,6 +21,7 @@ use common_telemetry::logging;
 use criterion::*;
 use engine_bencher::config::BenchConfig;
 use engine_bencher::loader::ParquetLoader;
+use engine_bencher::memtable::insert_bench::InsertBench;
 use engine_bencher::put_bench::PutBench;
 use engine_bencher::scan_bench::ScanBench;
 use engine_bencher::target::Target;
@@ -74,6 +75,26 @@ impl BenchContext {
             self.config.put.path.clone(),
             self.config.put.engine_config(),
         )
+    }
+
+    fn new_insert_memtable_bench(&self) -> InsertBench {
+        let loader = ParquetLoader::new(
+            self.config.parquet_path.clone(),
+            self.config.insert_memtable.batch_size,
+        );
+
+        let mut bench = InsertBench::new(self.config.insert_memtable.rows_to_insert);
+
+        logging::info!(
+            "Start loading {} rows from parquet",
+            self.config.insert_memtable.rows_to_insert
+        );
+
+        bench.load_batches(&loader);
+
+        logging::info!("End loading rows from parquet");
+
+        bench
     }
 }
 
@@ -183,10 +204,45 @@ fn bench_put(c: &mut Criterion) {
     group.finish();
 }
 
+fn insert_btree_iter(times: usize, b: &mut Bencher<'_>, input: &(BenchContext, InsertBench)) {
+    b.iter(|| {
+        let metrics = input.1.bench_btree();
+
+        input.0.maybe_print_log(times, &metrics);
+    })
+}
+
+fn bench_insert_memtable(c: &mut Criterion) {
+    let config = init_bench();
+
+    let mut group = c.benchmark_group("insert_memtable");
+
+    group.measurement_time(config.measurement_time);
+    group.sample_size(config.sample_size);
+
+    let parquet_path = config.parquet_path.clone();
+    let ctx = BenchContext::new(config);
+    let insert_bench = ctx.new_insert_memtable_bench();
+
+    logging::info!("Start insert memtable bench");
+    let mut times = 0;
+    let input = (ctx, insert_bench);
+    group.bench_with_input(
+        BenchmarkId::new("btree", parquet_path),
+        &input,
+        |b, input| {
+            times += 1;
+            insert_btree_iter(times, b, input)
+        },
+    );
+
+    group.finish();
+}
+
 criterion_group!(
     name = benches;
     config = Criterion::default();
-    targets = bench_full_scan, bench_put,
+    targets = bench_full_scan, bench_put, bench_insert_memtable,
 );
 
 criterion_main!(benches);

@@ -6,20 +6,20 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-common-base = { git = "https://github.com/GreptimeTeam/greptimedb.git", rev = "0e937be3f5522a0baf4d2b300205effb5e85e3a1" }
-common-runtime = { git = "https://github.com/GreptimeTeam/greptimedb.git", rev = "0e937be3f5522a0baf4d2b300205effb5e85e3a1" }
-common-telemetry = { git = "https://github.com/GreptimeTeam/greptimedb.git", rev = "0e937be3f5522a0baf4d2b300205effb5e85e3a1" }
-datatypes = { git = "https://github.com/GreptimeTeam/greptimedb.git", rev = "0e937be3f5522a0baf4d2b300205effb5e85e3a1" }
+common-base = { git = "https://github.com/evenyag/greptimedb.git", rev = "7a69d56361191cf3e60173a2d845ca5df93899f4" }
+common-runtime = { git = "https://github.com/evenyag/greptimedb.git", rev = "7a69d56361191cf3e60173a2d845ca5df93899f4" }
+common-telemetry = { git = "https://github.com/evenyag/greptimedb.git", rev = "7a69d56361191cf3e60173a2d845ca5df93899f4" }
+datatypes = { git = "https://github.com/evenyag/greptimedb.git", rev = "7a69d56361191cf3e60173a2d845ca5df93899f4" }
 flume = "0.10"
 futures-util.workspace = true
 humantime-serde.workspace = true
-log-store = { git = "https://github.com/GreptimeTeam/greptimedb.git", rev = "0e937be3f5522a0baf4d2b300205effb5e85e3a1" }
-object-store = { git = "https://github.com/GreptimeTeam/greptimedb.git", rev = "0e937be3f5522a0baf4d2b300205effb5e85e3a1" }
+log-store = { git = "https://github.com/evenyag/greptimedb.git", rev = "7a69d56361191cf3e60173a2d845ca5df93899f4" }
+object-store = { git = "https://github.com/evenyag/greptimedb.git", rev = "7a69d56361191cf3e60173a2d845ca5df93899f4" }
 once_cell = "1"
 parquet = { workspace = true, features = ["async"] }
 serde.workspace = true
-storage = { git = "https://github.com/GreptimeTeam/greptimedb.git", rev = "0e937be3f5522a0baf4d2b300205effb5e85e3a1" }
-store-api = { git = "https://github.com/GreptimeTeam/greptimedb.git", rev = "0e937be3f5522a0baf4d2b300205effb5e85e3a1" }
+storage = { git = "https://github.com/evenyag/greptimedb.git", rev = "7a69d56361191cf3e60173a2d845ca5df93899f4" }
+store-api = { git = "https://github.com/evenyag/greptimedb.git", rev = "7a69d56361191cf3e60173a2d845ca5df93899f4" }
 tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
 

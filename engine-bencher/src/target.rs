@@ -45,7 +45,7 @@ use store_api::storage::{
 };
 
 /// Timestamp column name.
-const TS_COLUMN_NAME: &str = "ts";
+pub const TS_COLUMN_NAME: &str = "ts";
 
 /// Returns a new object store based on local file system.
 async fn new_fs_object_store(path: &str) -> ObjectStore {
@@ -92,7 +92,7 @@ fn new_compaction_scheduler<S: LogStore>() -> CompactionSchedulerRef<S> {
     let config = SchedulerConfig {
         max_inflight_tasks: 4,
     };
-    let handler = CompactionHandler::new(picker);
+    let handler = CompactionHandler { picker };
     let scheduler = LocalScheduler::new(config, handler);
     Arc::new(scheduler)
 }
@@ -102,7 +102,10 @@ fn new_compaction_scheduler<S: LogStore>() -> CompactionSchedulerRef<S> {
 // ```
 // cpu,hostname=host_0,region=eu-central-1,datacenter=eu-central-1a,rack=6,os=Ubuntu15.10,arch=x86,team=SF,service=19,service_version=1,service_environment=test usage_user=58i,usage_system=2i,usage_idle=24i,usage_nice=61i,usage_iowait=22i,usage_irq=63i,usage_softirq=6i,usage_steal=44i,usage_guest=80i,usage_guest_nice=38i 1451606400000000000
 // ```
-fn new_cpu_region_descriptor(region_name: &str, region_id: RegionId) -> RegionDescriptor {
+pub(crate) fn new_cpu_region_descriptor(
+    region_name: &str,
+    region_id: RegionId,
+) -> RegionDescriptor {
     let mut column_id = 1;
     // Note that the timestamp in the input parquet file has Timestamp(Microsecond, None) type.
     let timestamp = ColumnDescriptorBuilder::new(
@@ -164,7 +167,6 @@ fn new_cpu_region_descriptor(region_name: &str, region_id: RegionId) -> RegionDe
         .name(region_name)
         .row_key(row_key)
         .default_cf(cf)
-        .compaction_time_window(None)
         .build()
         .unwrap()
 }

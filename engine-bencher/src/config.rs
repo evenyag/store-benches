@@ -22,6 +22,50 @@ use serde::Deserialize;
 use storage::config::EngineConfig;
 use store_api::storage::RegionId;
 
+/// Config for all benchmarks.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct BenchConfig {
+    pub runtime_size: usize,
+    pub parquet_path: String,
+    #[serde(with = "humantime_serde")]
+    pub measurement_time: Duration,
+    pub sample_size: usize,
+    /// Print metrics every N benches. Never print metrics if N is 0.
+    pub print_metrics_every: usize,
+    /// Config for scan bench.
+    pub scan: ScanConfig,
+    /// Config for put bench.
+    pub put: PutConfig,
+    /// config for insert memtable bench.
+    pub insert_memtable: InsertMemtableConfig,
+}
+
+impl Default for BenchConfig {
+    fn default() -> BenchConfig {
+        BenchConfig {
+            runtime_size: 4,
+            parquet_path: "".to_string(),
+            measurement_time: Duration::from_secs(30),
+            sample_size: 30,
+            print_metrics_every: 0,
+            scan: ScanConfig::default(),
+            put: PutConfig::default(),
+            insert_memtable: InsertMemtableConfig::default(),
+        }
+    }
+}
+
+impl BenchConfig {
+    pub fn parse_toml(path: &str) -> BenchConfig {
+        let mut file = File::open(path).unwrap();
+        let mut content = String::new();
+        file.read_to_string(&mut content).unwrap();
+
+        toml::from_str(&content).unwrap()
+    }
+}
+
 /// Scan bench config.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
@@ -83,42 +127,21 @@ impl PutConfig {
     }
 }
 
+/// Insert memtable bench config.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
-pub struct BenchConfig {
-    pub runtime_size: usize,
-    pub parquet_path: String,
-    #[serde(with = "humantime_serde")]
-    pub measurement_time: Duration,
-    pub sample_size: usize,
-    /// Print metrics every N benches. Never print metrics if N is 0.
-    pub print_metrics_every: usize,
-    /// Config for scan bench.
-    pub scan: ScanConfig,
-    /// Config for put bench.
-    pub put: PutConfig,
+pub struct InsertMemtableConfig {
+    /// Batch size to load/insert.
+    pub batch_size: usize,
+    /// Number of rows to insert.
+    pub rows_to_insert: usize,
 }
 
-impl Default for BenchConfig {
-    fn default() -> BenchConfig {
-        BenchConfig {
-            runtime_size: 4,
-            parquet_path: "".to_string(),
-            measurement_time: Duration::from_secs(30),
-            sample_size: 30,
-            print_metrics_every: 0,
-            scan: ScanConfig::default(),
-            put: PutConfig::default(),
+impl Default for InsertMemtableConfig {
+    fn default() -> Self {
+        InsertMemtableConfig {
+            batch_size: 1000,
+            rows_to_insert: 500000,
         }
-    }
-}
-
-impl BenchConfig {
-    pub fn parse_toml(path: &str) -> BenchConfig {
-        let mut file = File::open(path).unwrap();
-        let mut content = String::new();
-        file.read_to_string(&mut content).unwrap();
-
-        toml::from_str(&content).unwrap()
     }
 }
