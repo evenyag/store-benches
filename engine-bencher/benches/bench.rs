@@ -16,6 +16,7 @@ use std::cell::Cell;
 use std::env;
 use std::fmt::Debug;
 use std::sync::{Mutex, Once};
+use std::time::Duration;
 
 use common_base::readable_size::ReadableSize;
 use common_runtime::{create_runtime, Runtime};
@@ -114,8 +115,7 @@ impl BenchContext {
         let mem_after = MemoryMetrics::read_metrics();
         logging::info!(
             "End loading rows from parquet, allocated: {}, memory: {:?}",
-            ReadableSize(mem_after.subtract_allocated(&mem_before) as u64),
-            mem_after
+            ReadableSize(mem_after.subtract_allocated(&mem_before) as u64), mem_after
         );
 
         bench
@@ -250,6 +250,20 @@ fn insert_btree_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableB
     })
 }
 
+fn insert_btree_only_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
+    b.iter_custom(|iters| {
+        let mut insert_cost = Duration::ZERO;
+        for _i in 0..iters {
+            let metrics = input.1.bench_btree();
+            insert_cost += metrics.total_cost;
+
+            input.0.maybe_print_log(&metrics);
+        }
+
+        insert_cost
+    })
+}
+
 fn bench_insert_memtable(c: &mut Criterion) {
     let config = init_bench();
 
@@ -265,9 +279,14 @@ fn bench_insert_memtable(c: &mut Criterion) {
     logging::info!("Start insert memtable bench");
     let input = (ctx, insert_bench);
     group.bench_with_input(
-        BenchmarkId::new("btree", parquet_path),
+        BenchmarkId::new("btree", parquet_path.clone()),
         &input,
         |b, input| insert_btree_iter(b, input),
+    );
+    group.bench_with_input(
+        BenchmarkId::new("btree-insert-only", parquet_path),
+        &input,
+        |b, input| insert_btree_only_iter(b, input),
     );
 
     group.finish();
