@@ -21,7 +21,7 @@ use common_telemetry::logging;
 use criterion::*;
 use engine_bencher::config::BenchConfig;
 use engine_bencher::loader::ParquetLoader;
-use engine_bencher::memtable::insert_bench::InsertBench;
+use engine_bencher::memtable::insert_bench::InsertMemtableBench;
 use engine_bencher::put_bench::PutBench;
 use engine_bencher::scan_bench::ScanBench;
 use engine_bencher::target::Target;
@@ -77,13 +77,13 @@ impl BenchContext {
         )
     }
 
-    fn new_insert_memtable_bench(&self) -> InsertBench {
+    fn new_insert_memtable_bench(&self) -> InsertMemtableBench {
         let loader = ParquetLoader::new(
             self.config.parquet_path.clone(),
             self.config.insert_memtable.batch_size,
         );
 
-        let mut bench = InsertBench::new(self.config.insert_memtable.rows_to_insert);
+        let mut bench = InsertMemtableBench::new(self.config.insert_memtable.rows_to_insert);
 
         logging::info!(
             "Start loading {} rows from parquet",
@@ -204,7 +204,7 @@ fn bench_put(c: &mut Criterion) {
     group.finish();
 }
 
-fn insert_btree_iter(times: usize, b: &mut Bencher<'_>, input: &(BenchContext, InsertBench)) {
+fn insert_btree_iter(times: usize, b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
     b.iter(|| {
         let metrics = input.1.bench_btree();
 

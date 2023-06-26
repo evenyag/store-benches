@@ -17,17 +17,17 @@ pub struct InsertMetrics {
 }
 
 /// Bencher to bench inserting memtables.
-pub struct InsertBench {
+pub struct InsertMemtableBench {
     /// Number of rows to insert into the memtable.
     rows_to_insert: usize,
     /// Batches to insert.
     batches: Vec<RecordBatch>,
 }
 
-impl InsertBench {
-    /// Returns a new [InsertBench].
-    pub fn new(rows_to_insert: usize) -> InsertBench {
-        InsertBench {
+impl InsertMemtableBench {
+    /// Returns a new [InsertMemtableBench].
+    pub fn new(rows_to_insert: usize) -> InsertMemtableBench {
+        InsertMemtableBench {
             rows_to_insert,
             batches: Vec::new(),
         }
@@ -60,7 +60,7 @@ impl InsertBench {
     }
 }
 
-impl InsertBench {
+impl InsertMemtableBench {
     /// Run benchmark for BTreeMemtable.
     pub fn bench_btree(&self) -> InsertMetrics {
         let mut inserter = BTreeMemtableInserter::new();
