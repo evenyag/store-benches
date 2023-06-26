@@ -18,11 +18,11 @@ const PARQUET_TIMESTAMP_NAME: &str = "timestamp";
 
 /// Memtable inserter.
 pub trait Inserter {
-    /// Reset the memtable.
-    fn reset(&mut self);
-
     /// Insert `record_batch` into the memtable.
     fn insert(&self, record_batch: &RecordBatch);
+
+    /// Returns memtable's estimated bytes.
+    fn estimated_bytes(&self) -> usize;
 }
 
 /// Memtable scanner.
@@ -94,15 +94,14 @@ impl BTreeMemtableTarget {
 }
 
 impl Inserter for BTreeMemtableTarget {
-    fn reset(&mut self) {
-        self.memtable = new_btree_memtable(self.schema.clone());
-        self.sequence.store(0, Ordering::Relaxed);
-    }
-
     fn insert(&self, record_batch: &RecordBatch) {
         let kvs = self.record_batch_to_key_values(record_batch);
 
         self.memtable.write(&kvs).unwrap();
+    }
+
+    fn estimated_bytes(&self) -> usize {
+        self.memtable.stats().estimated_bytes
     }
 }
 

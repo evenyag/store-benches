@@ -13,6 +13,8 @@ pub struct InsertMetrics {
     pub rows_to_insert: usize,
     pub total_cost: Duration,
     pub bytes_allocated: usize,
+    /// Memory allocated estimated by the memtable.
+    pub memtable_estimated_bytes: usize,
 }
 
 impl fmt::Debug for InsertMetrics {
@@ -21,6 +23,10 @@ impl fmt::Debug for InsertMetrics {
             .field("rows_to_insert", &self.rows_to_insert)
             .field("total_cost", &self.total_cost)
             .field("bytes_allocated", &DisplayBytes(self.bytes_allocated))
+            .field(
+                "memtable_estimated_bytes",
+                &DisplayBytes(self.memtable_estimated_bytes),
+            )
             .finish()
     }
 }
@@ -51,8 +57,6 @@ impl InsertMemtableBench {
 
     /// Insert data.
     fn insert<T: Inserter>(&self, inserter: &mut T) -> InsertMetrics {
-        inserter.reset();
-
         let start = Instant::now();
         let mem_before = MemoryMetrics::read_metrics();
 
@@ -65,6 +69,7 @@ impl InsertMemtableBench {
             rows_to_insert: self.source.rows_to_insert(),
             total_cost: start.elapsed(),
             bytes_allocated,
+            memtable_estimated_bytes: inserter.estimated_bytes(),
         }
     }
 }
