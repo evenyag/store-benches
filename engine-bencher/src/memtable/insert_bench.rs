@@ -2,12 +2,9 @@
 
 use std::time::{Duration, Instant};
 
-use common_telemetry::logging;
-use datatypes::arrow::record_batch::RecordBatch;
-
-use super::inserter::BTreeMemtableInserter;
 use crate::loader::ParquetLoader;
-use crate::memtable::inserter::Inserter;
+use crate::memtable::inserter::{BTreeMemtableInserter, Inserter};
+use crate::memtable::source::Source;
 
 /// Metrics of the insert benchmark.
 #[derive(Debug)]
@@ -18,45 +15,20 @@ pub struct InsertMetrics {
 
 /// Bencher to bench inserting memtables.
 pub struct InsertMemtableBench {
-    /// Number of rows to insert into the memtable.
-    rows_to_insert: usize,
-    /// Batches to insert.
-    batches: Vec<RecordBatch>,
+    source: Source,
 }
 
 impl InsertMemtableBench {
     /// Returns a new [InsertMemtableBench].
     pub fn new(rows_to_insert: usize) -> InsertMemtableBench {
         InsertMemtableBench {
-            rows_to_insert,
-            batches: Vec::new(),
+            source: Source::new(rows_to_insert),
         }
     }
 
     /// Load batches from parquet to memory.
     pub fn load_batches(&mut self, loader: &ParquetLoader) {
-        let mut rows_loaded = 0;
-        let reader = loader.reader();
-
-        for batch in reader {
-            let batch = batch.unwrap();
-            if batch.num_rows() + rows_loaded > self.rows_to_insert {
-                self.batches
-                    .push(batch.slice(0, self.rows_to_insert - rows_loaded));
-                rows_loaded = self.rows_to_insert;
-                break;
-            } else {
-                rows_loaded += batch.num_rows();
-                self.batches.push(batch);
-            }
-        }
-
-        logging::info!(
-            "Insert bench at most load {} rows, load {} rows actually",
-            self.rows_to_insert,
-            rows_loaded
-        );
-        self.rows_to_insert = rows_loaded;
+        self.source.load_batches(loader);
     }
 }
 
@@ -73,12 +45,10 @@ impl InsertMemtableBench {
 
         let start = Instant::now();
 
-        for batch in &self.batches {
-            inserter.insert(batch);
-        }
+        self.source.insert(inserter);
 
         InsertMetrics {
-            rows_to_insert: self.rows_to_insert,
+            rows_to_insert: self.source.rows_to_insert(),
             total_cost: start.elapsed(),
         }
     }

@@ -204,7 +204,11 @@ fn bench_put(c: &mut Criterion) {
     group.finish();
 }
 
-fn insert_btree_iter(times: usize, b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
+fn insert_btree_iter(
+    times: usize,
+    b: &mut Bencher<'_>,
+    input: &(BenchContext, InsertMemtableBench),
+) {
     b.iter(|| {
         let metrics = input.1.bench_btree();
 
