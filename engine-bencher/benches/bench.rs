@@ -12,20 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cell::Cell;
 use std::env;
 use std::fmt::Debug;
 use std::sync::{Mutex, Once};
 
+use common_base::readable_size::ReadableSize;
 use common_runtime::{create_runtime, Runtime};
 use common_telemetry::logging;
 use criterion::*;
 use engine_bencher::config::BenchConfig;
 use engine_bencher::loader::ParquetLoader;
+use engine_bencher::memory::MemoryMetrics;
 use engine_bencher::memtable::insert_bench::InsertMemtableBench;
+use engine_bencher::memtable::scan_bench::ScanMemtableBench;
 use engine_bencher::put_bench::PutBench;
 use engine_bencher::scan_bench::ScanBench;
 use engine_bencher::target::Target;
 use once_cell::sync::Lazy;
+use tikv_jemallocator::Jemalloc;
+
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
 
 const BENCH_CONFIG_KEY: &str = "BENCH_CONFIG";
 const BENCH_ENABLE_LOG_KEY: &str = "BENCH_ENABLE_LOG";
@@ -35,15 +43,24 @@ static GLOBAL_CONFIG: Lazy<Mutex<BenchConfig>> = Lazy::new(|| Mutex::new(BenchCo
 struct BenchContext {
     config: BenchConfig,
     runtime: Runtime,
+    times: Cell<usize>,
 }
 
 impl BenchContext {
     fn new(config: BenchConfig) -> BenchContext {
         let runtime = create_runtime("bench", "bench-worker", config.runtime_size);
-        BenchContext { config, runtime }
+        BenchContext {
+            config,
+            runtime,
+            times: Cell::new(0),
+        }
     }
 
-    fn maybe_print_log<T: Debug>(&self, times: usize, metrics: &T) {
+    fn maybe_print_log<T: Debug>(&self, metrics: &T) {
+        let mut times = self.times.take();
+        times += 1;
+        self.times.set(times);
+
         if self.config.print_metrics_every > 0 {
             if times % self.config.print_metrics_every == 0 {
                 logging::info!("Metrics at times {} is: {:?}", times, metrics);
@@ -83,16 +100,43 @@ impl BenchContext {
             self.config.insert_memtable.batch_size,
         );
 
-        let mut bench = InsertMemtableBench::new(self.config.insert_memtable.rows_to_insert);
+        let mut bench = InsertMemtableBench::new(self.config.insert_memtable.total_rows);
 
+        let mem_before = MemoryMetrics::read_metrics();
         logging::info!(
-            "Start loading {} rows from parquet",
-            self.config.insert_memtable.rows_to_insert
+            "Start loading {} rows from parquet, memory: {:?}",
+            self.config.insert_memtable.total_rows,
+            mem_before,
         );
 
-        bench.load_batches(&loader);
+        bench.init(&loader);
 
-        logging::info!("End loading rows from parquet");
+        let mem_after = MemoryMetrics::read_metrics();
+        logging::info!(
+            "End loading rows from parquet, allocated: {}, memory: {:?}",
+            ReadableSize(mem_after.subtract_allocated(&mem_before) as u64),
+            mem_after
+        );
+
+        bench
+    }
+
+    fn new_scan_memtable_bench(&self) -> ScanMemtableBench {
+        let loader = ParquetLoader::new(
+            self.config.parquet_path.clone(),
+            self.config.scan_memtable.load_batch_size,
+        );
+
+        let mut bench = ScanMemtableBench::new(self.config.scan_memtable.total_rows);
+
+        logging::info!(
+            "Start loading {} rows from parquet to memtable",
+            self.config.insert_memtable.total_rows
+        );
+
+        bench.init(&loader);
+
+        logging::info!("End loading rows from parquet to memtable");
 
         bench
     }
@@ -127,11 +171,11 @@ fn init_bench() -> BenchConfig {
     (*config).clone()
 }
 
-fn scan_storage_iter(times: usize, b: &mut Bencher<'_>, input: &(BenchContext, ScanBench)) {
+fn scan_storage_iter(b: &mut Bencher<'_>, input: &(BenchContext, ScanBench)) {
     b.iter(|| {
         let metrics = input.0.runtime.block_on(async { input.1.run().await });
 
-        input.0.maybe_print_log(times, &metrics);
+        input.0.maybe_print_log(&metrics);
     })
 }
 
@@ -154,15 +198,11 @@ fn bench_full_scan(c: &mut Criterion) {
 
     logging::info!("Start full scan bench");
 
-    let mut times = 0;
     let input = (ctx, scan_bench);
     group.bench_with_input(
         BenchmarkId::new("scan", parquet_path),
         &input,
-        |b, input| {
-            times += 1;
-            scan_storage_iter(times, b, input)
-        },
+        |b, input| scan_storage_iter(b, input),
     );
 
     input.0.runtime.block_on(async {
@@ -172,11 +212,11 @@ fn bench_full_scan(c: &mut Criterion) {
     group.finish();
 }
 
-fn put_storage_iter(times: usize, b: &mut Bencher<'_>, input: &(BenchContext, PutBench)) {
+fn put_storage_iter(b: &mut Bencher<'_>, input: &(BenchContext, PutBench)) {
     b.iter(|| {
         let metrics = input.0.runtime.block_on(async { input.1.run().await });
 
-        input.0.maybe_print_log(times, &metrics);
+        input.0.maybe_print_log(&metrics);
     })
 }
 
@@ -194,25 +234,19 @@ fn bench_put(c: &mut Criterion) {
 
     logging::info!("Start put bench");
 
-    let mut times = 0;
     let input = (ctx, put_bench);
     group.bench_with_input(BenchmarkId::new("put", parquet_path), &input, |b, input| {
-        times += 1;
-        put_storage_iter(times, b, input)
+        put_storage_iter(b, input)
     });
 
     group.finish();
 }
 
-fn insert_btree_iter(
-    times: usize,
-    b: &mut Bencher<'_>,
-    input: &(BenchContext, InsertMemtableBench),
-) {
+fn insert_btree_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
     b.iter(|| {
         let metrics = input.1.bench_btree();
 
-        input.0.maybe_print_log(times, &metrics);
+        input.0.maybe_print_log(&metrics);
     })
 }
 
@@ -229,15 +263,44 @@ fn bench_insert_memtable(c: &mut Criterion) {
     let insert_bench = ctx.new_insert_memtable_bench();
 
     logging::info!("Start insert memtable bench");
-    let mut times = 0;
     let input = (ctx, insert_bench);
     group.bench_with_input(
         BenchmarkId::new("btree", parquet_path),
         &input,
-        |b, input| {
-            times += 1;
-            insert_btree_iter(times, b, input)
-        },
+        |b, input| insert_btree_iter(b, input),
+    );
+
+    group.finish();
+}
+
+fn scan_btree_iter(b: &mut Bencher<'_>, input: &(BenchContext, ScanMemtableBench)) {
+    b.iter(|| {
+        let metrics = input
+            .1
+            .bench_btree(input.0.config.scan_memtable.scan_batch_size);
+
+        input.0.maybe_print_log(&metrics);
+    })
+}
+
+fn bench_scan_memtable(c: &mut Criterion) {
+    let config = init_bench();
+
+    let mut group = c.benchmark_group("scan_memtable");
+
+    group.measurement_time(config.measurement_time);
+    group.sample_size(config.sample_size);
+
+    let parquet_path = config.parquet_path.clone();
+    let ctx = BenchContext::new(config);
+    let scan_bench = ctx.new_scan_memtable_bench();
+
+    logging::info!("Start scan memtable bench");
+    let input = (ctx, scan_bench);
+    group.bench_with_input(
+        BenchmarkId::new("btree", parquet_path),
+        &input,
+        |b, input| scan_btree_iter(b, input),
     );
 
     group.finish();
@@ -246,7 +309,10 @@ fn bench_insert_memtable(c: &mut Criterion) {
 criterion_group!(
     name = benches;
     config = Criterion::default();
-    targets = bench_full_scan, bench_put, bench_insert_memtable,
+    targets = bench_full_scan,
+              bench_put,
+              bench_insert_memtable,
+              bench_scan_memtable,
 );
 
 criterion_main!(benches);

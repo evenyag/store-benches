@@ -1,16 +1,28 @@
 //! Bench inserting memtables.
 
+use std::fmt;
 use std::time::{Duration, Instant};
 
 use crate::loader::ParquetLoader;
-use crate::memtable::inserter::{BTreeMemtableInserter, Inserter};
+use crate::memory::{DisplayBytes, MemoryMetrics};
 use crate::memtable::source::Source;
+use crate::memtable::target::{BTreeMemtableTarget, Inserter};
 
 /// Metrics of the insert benchmark.
-#[derive(Debug)]
 pub struct InsertMetrics {
     pub rows_to_insert: usize,
     pub total_cost: Duration,
+    pub bytes_allocated: usize,
+}
+
+impl fmt::Debug for InsertMetrics {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InsertMetrics")
+            .field("rows_to_insert", &self.rows_to_insert)
+            .field("total_cost", &self.total_cost)
+            .field("bytes_allocated", &DisplayBytes(self.bytes_allocated))
+            .finish()
+    }
 }
 
 /// Bencher to bench inserting memtables.
@@ -27,16 +39,14 @@ impl InsertMemtableBench {
     }
 
     /// Load batches from parquet to memory.
-    pub fn load_batches(&mut self, loader: &ParquetLoader) {
+    pub fn init(&mut self, loader: &ParquetLoader) {
         self.source.load_batches(loader);
     }
-}
 
-impl InsertMemtableBench {
     /// Run benchmark for BTreeMemtable.
     pub fn bench_btree(&self) -> InsertMetrics {
-        let mut inserter = BTreeMemtableInserter::new();
-        self.insert(&mut inserter)
+        let mut target = BTreeMemtableTarget::new();
+        self.insert(&mut target)
     }
 
     /// Insert data.
@@ -44,12 +54,17 @@ impl InsertMemtableBench {
         inserter.reset();
 
         let start = Instant::now();
+        let mem_before = MemoryMetrics::read_metrics();
 
         self.source.insert(inserter);
+
+        let mem_after = MemoryMetrics::read_metrics();
+        let bytes_allocated = mem_after.subtract_allocated(&mem_before);
 
         InsertMetrics {
             rows_to_insert: self.source.rows_to_insert(),
             total_cost: start.elapsed(),
+            bytes_allocated,
         }
     }
 }

@@ -20,6 +20,8 @@ parquet = { workspace = true, features = ["async"] }
 serde.workspace = true
 storage = { git = "https://github.com/evenyag/greptimedb.git", rev = "7a69d56361191cf3e60173a2d845ca5df93899f4" }
 store-api = { git = "https://github.com/evenyag/greptimedb.git", rev = "7a69d56361191cf3e60173a2d845ca5df93899f4" }
+tikv-jemallocator = "0.5"
+tikv-jemalloc-ctl = "0.5"
 tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
 

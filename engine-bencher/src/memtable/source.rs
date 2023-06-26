@@ -4,7 +4,7 @@ use common_telemetry::logging;
 use datatypes::arrow::record_batch::RecordBatch;
 
 use crate::loader::ParquetLoader;
-use crate::memtable::inserter::Inserter;
+use crate::memtable::target::Inserter;
 
 /// Data source for benchmark.
 pub(crate) struct Source {

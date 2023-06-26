@@ -37,8 +37,10 @@ pub struct BenchConfig {
     pub scan: ScanConfig,
     /// Config for put bench.
     pub put: PutConfig,
-    /// config for insert memtable bench.
+    /// Config for insert memtable bench.
     pub insert_memtable: InsertMemtableConfig,
+    /// Config for insert memtable bench.
+    pub scan_memtable: ScanMemtableConfig,
 }
 
 impl Default for BenchConfig {
@@ -52,6 +54,7 @@ impl Default for BenchConfig {
             scan: ScanConfig::default(),
             put: PutConfig::default(),
             insert_memtable: InsertMemtableConfig::default(),
+            scan_memtable: ScanMemtableConfig::default(),
         }
     }
 }
@@ -134,14 +137,36 @@ pub struct InsertMemtableConfig {
     /// Batch size to load/insert.
     pub batch_size: usize,
     /// Number of rows to insert.
-    pub rows_to_insert: usize,
+    pub total_rows: usize,
 }
 
 impl Default for InsertMemtableConfig {
     fn default() -> Self {
         InsertMemtableConfig {
             batch_size: 1000,
-            rows_to_insert: 500000,
+            total_rows: 500000,
+        }
+    }
+}
+
+/// Scan memtable bench config.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct ScanMemtableConfig {
+    /// Number of rows to load and scan.
+    pub total_rows: usize,
+    /// Batch size to load.
+    pub load_batch_size: usize,
+    /// Batch size to scan.
+    pub scan_batch_size: usize,
+}
+
+impl Default for ScanMemtableConfig {
+    fn default() -> Self {
+        ScanMemtableConfig {
+            total_rows: 500000,
+            load_batch_size: 1000,
+            scan_batch_size: 1000,
         }
     }
 }

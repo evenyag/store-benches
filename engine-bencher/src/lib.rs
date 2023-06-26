@@ -14,6 +14,7 @@
 
 pub mod config;
 pub mod loader;
+pub mod memory;
 pub mod memtable;
 pub mod put_bench;
 pub mod scan_bench;
