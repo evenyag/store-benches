@@ -29,7 +29,9 @@ pub trait Inserter {
 /// Memtable scanner.
 pub trait Scanner {
     /// Scan all rows in the memtable.
-    fn scan_all(&self, batch_size: usize);
+    ///
+    /// Returns number of rows scanned.
+    fn scan_all(&self, batch_size: usize) -> usize;
 }
 
 /// Memtable Target.
@@ -118,16 +120,20 @@ impl Inserter for MemtableTarget {
 }
 
 impl Scanner for MemtableTarget {
-    fn scan_all(&self, batch_size: usize) {
+    fn scan_all(&self, batch_size: usize) -> usize {
         let ctx = IterContext {
             batch_size,
             for_flush: false,
             ..Default::default()
         };
+        let mut num_scanned = 0;
         let iter = self.memtable.iter(ctx).unwrap();
         for batch in iter {
-            batch.unwrap();
+            let batch = batch.unwrap();
+            num_scanned += batch.num_rows();
         }
+
+        num_scanned
     }
 }
 

@@ -41,10 +41,10 @@ impl ScanMemtableBench {
 
     /// Bench memtable.
     pub fn bench(&self, batch_size: usize) -> ScanMetrics {
-        let num_rows = self.source.rows_to_insert();
         let start = Instant::now();
 
-        self.target.as_ref().unwrap().scan_all(batch_size);
+        let num_rows = self.target.as_ref().unwrap().scan_all(batch_size);
+        assert_eq!(num_rows, self.source.rows_to_insert());
 
         ScanMetrics {
             total_cost: start.elapsed(),
