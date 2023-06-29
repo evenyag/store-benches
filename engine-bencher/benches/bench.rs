@@ -185,8 +185,12 @@ fn bench_full_scan(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("full_scan");
 
-    group.measurement_time(config.measurement_time);
-    group.sample_size(config.sample_size);
+    if let Some(v) = config.scan.measurement_time {
+        group.measurement_time(v);
+    }
+    if let Some(v) = config.scan.sample_size {
+        group.sample_size(v);
+    }
 
     let parquet_path = config.scan.path.clone();
     let ctx = BenchContext::new(config);
@@ -224,10 +228,14 @@ fn put_storage_iter(b: &mut Bencher<'_>, input: &(BenchContext, PutBench)) {
 fn bench_put(c: &mut Criterion) {
     let config = init_bench();
 
-    let mut group = c.benchmark_group("full_scan");
+    let mut group = c.benchmark_group("put");
 
-    group.measurement_time(config.measurement_time);
-    group.sample_size(config.sample_size);
+    if let Some(v) = config.put.measurement_time {
+        group.measurement_time(v);
+    }
+    if let Some(v) = config.put.sample_size {
+        group.sample_size(v);
+    }
 
     let parquet_path = config.parquet_path.clone();
     let ctx = BenchContext::new(config);
@@ -292,8 +300,12 @@ fn bench_insert_memtable(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("insert_memtable");
 
-    group.measurement_time(config.measurement_time);
-    group.sample_size(config.sample_size);
+    if let Some(v) = config.insert_memtable.measurement_time {
+        group.measurement_time(v);
+    }
+    if let Some(v) = config.insert_memtable.sample_size {
+        group.sample_size(v);
+    }
 
     let parquet_path = config.parquet_path.clone();
     let ctx = BenchContext::new(config);
@@ -342,8 +354,12 @@ fn bench_scan_memtable(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("scan_memtable");
 
-    group.measurement_time(config.measurement_time);
-    group.sample_size(config.sample_size);
+    if let Some(v) = config.scan_memtable.measurement_time {
+        group.measurement_time(v);
+    }
+    if let Some(v) = config.scan_memtable.sample_size {
+        group.sample_size(v);
+    }
 
     let parquet_path = config.parquet_path.clone();
     let ctx = BenchContext::new(config);

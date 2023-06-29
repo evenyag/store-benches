@@ -28,9 +28,6 @@ use store_api::storage::RegionId;
 pub struct BenchConfig {
     pub runtime_size: usize,
     pub parquet_path: String,
-    #[serde(with = "humantime_serde")]
-    pub measurement_time: Duration,
-    pub sample_size: usize,
     /// Print metrics every N benches. Never print metrics if N is 0.
     pub print_metrics_every: usize,
     /// Config for scan bench.
@@ -48,8 +45,6 @@ impl Default for BenchConfig {
         BenchConfig {
             runtime_size: 4,
             parquet_path: "".to_string(),
-            measurement_time: Duration::from_secs(30),
-            sample_size: 30,
             print_metrics_every: 0,
             scan: ScanConfig::default(),
             put: PutConfig::default(),
@@ -73,6 +68,9 @@ impl BenchConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct ScanConfig {
+    #[serde(with = "humantime_serde")]
+    pub measurement_time: Option<Duration>,
+    pub sample_size: Option<usize>,
     /// Storage data path.
     pub path: String,
     /// Region to bench.
@@ -86,6 +84,8 @@ pub struct ScanConfig {
 impl Default for ScanConfig {
     fn default() -> Self {
         ScanConfig {
+            measurement_time: None,
+            sample_size: None,
             path: "/tmp/storage-bencher/".to_string(),
             region_id: 0,
             load_batch_size: 1024,
@@ -105,6 +105,9 @@ impl ScanConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct PutConfig {
+    #[serde(with = "humantime_serde")]
+    pub measurement_time: Option<Duration>,
+    pub sample_size: Option<usize>,
     /// Storage data path.
     pub path: String,
     /// Batch size to put.
@@ -116,6 +119,8 @@ pub struct PutConfig {
 impl Default for PutConfig {
     fn default() -> Self {
         PutConfig {
+            measurement_time: None,
+            sample_size: None,
             path: "/tmp/storage-bencher/".to_string(),
             batch_size: 1024,
             put_workers: 1,
@@ -134,6 +139,9 @@ impl PutConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct InsertMemtableConfig {
+    #[serde(with = "humantime_serde")]
+    pub measurement_time: Option<Duration>,
+    pub sample_size: Option<usize>,
     /// Batch size to load/insert.
     pub batch_size: usize,
     /// Number of rows to insert.
@@ -143,6 +151,8 @@ pub struct InsertMemtableConfig {
 impl Default for InsertMemtableConfig {
     fn default() -> Self {
         InsertMemtableConfig {
+            measurement_time: None,
+            sample_size: None,
             batch_size: 1000,
             total_rows: 500000,
         }
@@ -153,6 +163,9 @@ impl Default for InsertMemtableConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct ScanMemtableConfig {
+    #[serde(with = "humantime_serde")]
+    pub measurement_time: Option<Duration>,
+    pub sample_size: Option<usize>,
     /// Number of rows to load and scan.
     pub total_rows: usize,
     /// Batch size to load.
@@ -164,6 +177,8 @@ pub struct ScanMemtableConfig {
 impl Default for ScanMemtableConfig {
     fn default() -> Self {
         ScanMemtableConfig {
+            measurement_time: None,
+            sample_size: None,
             total_rows: 500000,
             load_batch_size: 1000,
             scan_batch_size: 1000,
