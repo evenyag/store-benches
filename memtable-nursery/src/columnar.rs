@@ -367,7 +367,7 @@ impl IterImpl {
         if let Some(batch) = &self.batch {
             batch.num_rows() >= self.ctx.batch_size
         } else {
-            true
+            false
         }
     }
 }
