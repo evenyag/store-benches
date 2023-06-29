@@ -115,7 +115,8 @@ impl BenchContext {
         let mem_after = MemoryMetrics::read_metrics();
         logging::info!(
             "End loading rows from parquet, allocated: {}, memory: {:?}",
-            ReadableSize(mem_after.subtract_allocated(&mem_before) as u64), mem_after
+            ReadableSize(mem_after.subtract_allocated(&mem_before) as u64),
+            mem_after
         );
 
         bench

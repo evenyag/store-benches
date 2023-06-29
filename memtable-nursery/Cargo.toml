@@ -6,3 +6,6 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+datatypes.workspace = true
+storage.workspace = true
+string-interner = "0.14"
