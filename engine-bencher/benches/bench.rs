@@ -131,13 +131,13 @@ impl BenchContext {
         let mut bench = ScanMemtableBench::new(self.config.scan_memtable.total_rows);
 
         logging::info!(
-            "Start loading {} rows from parquet to memtable",
+            "Start loading {} rows from parquet to bencher",
             self.config.insert_memtable.total_rows
         );
 
-        bench.init(&loader);
+        bench.load_data(&loader);
 
-        logging::info!("End loading rows from parquet to memtable");
+        logging::info!("End loading rows from parquet to bencher");
 
         bench
     }
@@ -265,6 +265,28 @@ fn insert_btree_only_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemt
     })
 }
 
+fn insert_columnar_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
+    b.iter(|| {
+        let metrics = input.1.bench_columnar();
+
+        input.0.maybe_print_log(&metrics);
+    })
+}
+
+fn insert_columnar_only_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
+    b.iter_custom(|iters| {
+        let mut insert_cost = Duration::ZERO;
+        for _i in 0..iters {
+            let metrics = input.1.bench_columnar();
+            insert_cost += metrics.total_cost;
+
+            input.0.maybe_print_log(&metrics);
+        }
+
+        insert_cost
+    })
+}
+
 fn bench_insert_memtable(c: &mut Criterion) {
     let config = init_bench();
 
@@ -278,26 +300,38 @@ fn bench_insert_memtable(c: &mut Criterion) {
     let insert_bench = ctx.new_insert_memtable_bench();
 
     logging::info!("Start insert memtable bench");
+
     let input = (ctx, insert_bench);
+    // btree
     group.bench_with_input(
         BenchmarkId::new("btree", parquet_path.clone()),
         &input,
         |b, input| insert_btree_iter(b, input),
     );
     group.bench_with_input(
-        BenchmarkId::new("btree-insert-only", parquet_path),
+        BenchmarkId::new("btree-insert-only", parquet_path.clone()),
         &input,
         |b, input| insert_btree_only_iter(b, input),
+    );
+
+    // columnar
+    group.bench_with_input(
+        BenchmarkId::new("columnar", parquet_path.clone()),
+        &input,
+        |b, input| insert_columnar_iter(b, input),
+    );
+    group.bench_with_input(
+        BenchmarkId::new("columnar-insert-only", parquet_path),
+        &input,
+        |b, input| insert_columnar_only_iter(b, input),
     );
 
     group.finish();
 }
 
-fn scan_btree_iter(b: &mut Bencher<'_>, input: &(BenchContext, ScanMemtableBench)) {
+fn scan_memtable_iter(b: &mut Bencher<'_>, input: &(BenchContext, ScanMemtableBench)) {
     b.iter(|| {
-        let metrics = input
-            .1
-            .bench_btree(input.0.config.scan_memtable.scan_batch_size);
+        let metrics = input.1.bench(input.0.config.scan_memtable.scan_batch_size);
 
         input.0.maybe_print_log(&metrics);
     })
@@ -316,11 +350,22 @@ fn bench_scan_memtable(c: &mut Criterion) {
     let scan_bench = ctx.new_scan_memtable_bench();
 
     logging::info!("Start scan memtable bench");
-    let input = (ctx, scan_bench);
+
+    let mut input = (ctx, scan_bench);
+    // btree
+    input.1.init_btree();
     group.bench_with_input(
-        BenchmarkId::new("btree", parquet_path),
+        BenchmarkId::new("btree", parquet_path.clone()),
         &input,
-        |b, input| scan_btree_iter(b, input),
+        |b, input| scan_memtable_iter(b, input),
+    );
+
+    // columnar
+    input.1.init_columnar();
+    group.bench_with_input(
+        BenchmarkId::new("columnar", parquet_path),
+        &input,
+        |b, input| scan_memtable_iter(b, input),
     );
 
     group.finish();

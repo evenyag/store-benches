@@ -14,6 +14,7 @@ flume = "0.10"
 futures-util.workspace = true
 humantime-serde.workspace = true
 log-store.workspace = true
+memtable-nursery = { path = "../memtable-nursery" }
 object-store.workspace = true
 once_cell = "1"
 parquet = { workspace = true, features = ["async"] }

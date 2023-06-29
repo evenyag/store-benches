@@ -6,8 +6,9 @@ use std::sync::Arc;
 use datatypes::arrow::datatypes::{DataType, TimeUnit};
 use datatypes::arrow::record_batch::RecordBatch;
 use datatypes::vectors::{Float64Vector, StringVector, TimestampMillisecondVector, VectorRef};
+use memtable_nursery::columnar::ColumnarMemtable;
 use storage::memtable::btree::BTreeMemtable;
-use storage::memtable::{IterContext, KeyValues, Memtable};
+use storage::memtable::{IterContext, KeyValues, MemtableRef};
 use storage::metadata::RegionMetadata;
 use storage::schema::RegionSchemaRef;
 use store_api::storage::OpType;
@@ -31,19 +32,30 @@ pub trait Scanner {
     fn scan_all(&self, batch_size: usize);
 }
 
-/// BTreeMemtable Target.
-pub struct BTreeMemtableTarget {
+/// Memtable Target.
+pub struct MemtableTarget {
     schema: RegionSchemaRef,
-    memtable: BTreeMemtable,
+    memtable: MemtableRef,
     sequence: AtomicU64,
 }
 
-impl BTreeMemtableTarget {
-    pub fn new() -> BTreeMemtableTarget {
+impl MemtableTarget {
+    /// Create a memtable target with btree memtable.
+    pub fn new_btree() -> MemtableTarget {
         let schema = cpu_region_schema();
-        BTreeMemtableTarget {
+        MemtableTarget {
             schema: schema.clone(),
-            memtable: new_btree_memtable(schema),
+            memtable: Arc::new(new_btree_memtable(schema)),
+            sequence: AtomicU64::new(0),
+        }
+    }
+
+    /// Create a memtable target with columnar memtable.
+    pub fn new_columnar() -> MemtableTarget {
+        let schema = cpu_region_schema();
+        MemtableTarget {
+            schema: schema.clone(),
+            memtable: Arc::new(ColumnarMemtable::new(schema)),
             sequence: AtomicU64::new(0),
         }
     }
@@ -93,7 +105,7 @@ impl BTreeMemtableTarget {
     }
 }
 
-impl Inserter for BTreeMemtableTarget {
+impl Inserter for MemtableTarget {
     fn insert(&self, record_batch: &RecordBatch) {
         let kvs = self.record_batch_to_key_values(record_batch);
 
@@ -105,7 +117,7 @@ impl Inserter for BTreeMemtableTarget {
     }
 }
 
-impl Scanner for BTreeMemtableTarget {
+impl Scanner for MemtableTarget {
     fn scan_all(&self, batch_size: usize) {
         let ctx = IterContext {
             batch_size,

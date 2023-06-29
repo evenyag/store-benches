@@ -2,15 +2,17 @@
 
 use std::time::Instant;
 
+use common_telemetry::logging;
+
 use crate::loader::ParquetLoader;
 use crate::memtable::source::Source;
-use crate::memtable::target::{BTreeMemtableTarget, Scanner};
+use crate::memtable::target::{MemtableTarget, Scanner};
 use crate::target::ScanMetrics;
 
 /// Bencher to scan memtable.
 pub struct ScanMemtableBench {
     source: Source,
-    target: BTreeMemtableTarget,
+    target: Option<MemtableTarget>,
 }
 
 impl ScanMemtableBench {
@@ -18,22 +20,31 @@ impl ScanMemtableBench {
     pub fn new(total_rows: usize) -> ScanMemtableBench {
         ScanMemtableBench {
             source: Source::new(total_rows),
-            target: BTreeMemtableTarget::new(),
+            target: None,
         }
     }
 
-    /// Init the bencher.
-    pub fn init(&mut self, loader: &ParquetLoader) {
+    /// Load data into the bencher.
+    pub fn load_data(&mut self, loader: &ParquetLoader) {
         self.source.load_batches(loader);
-        self.init_btree();
     }
 
-    /// Bench BTreeMemtable.
-    pub fn bench_btree(&self, batch_size: usize) -> ScanMetrics {
+    /// Init BTreeMemtable.
+    pub fn init_btree(&mut self) {
+        self.init_memtable(MemtableTarget::new_btree());
+    }
+
+    /// Init ColumnarMemtable.
+    pub fn init_columnar(&mut self) {
+        self.init_memtable(MemtableTarget::new_columnar());
+    }
+
+    /// Bench memtable.
+    pub fn bench(&self, batch_size: usize) -> ScanMetrics {
         let num_rows = self.source.rows_to_insert();
         let start = Instant::now();
 
-        self.target.scan_all(batch_size);
+        self.target.as_ref().unwrap().scan_all(batch_size);
 
         ScanMetrics {
             total_cost: start.elapsed(),
@@ -41,8 +52,17 @@ impl ScanMemtableBench {
         }
     }
 
-    /// Init btree memtable.
-    fn init_btree(&mut self) {
-        self.source.insert(&mut self.target);
+    /// Init memtable.
+    fn init_memtable(&mut self, mut target: MemtableTarget) {
+        // Clear old target.
+        self.target = None;
+
+        logging::info!("Start loading data into memtable");
+
+        self.source.insert(&mut target);
+
+        logging::info!("End loading data into memtable");
+
+        self.target = Some(target);
     }
 }

@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use crate::loader::ParquetLoader;
 use crate::memory::{DisplayBytes, MemoryMetrics};
 use crate::memtable::source::Source;
-use crate::memtable::target::{BTreeMemtableTarget, Inserter};
+use crate::memtable::target::{Inserter, MemtableTarget};
 
 /// Metrics of the insert benchmark.
 pub struct InsertMetrics {
@@ -51,7 +51,13 @@ impl InsertMemtableBench {
 
     /// Run benchmark for BTreeMemtable.
     pub fn bench_btree(&self) -> InsertMetrics {
-        let mut target = BTreeMemtableTarget::new();
+        let mut target = MemtableTarget::new_btree();
+        self.insert(&mut target)
+    }
+
+    /// Run benchmark for ColumnarMemtable.
+    pub fn bench_columnar(&self) -> InsertMetrics {
+        let mut target = MemtableTarget::new_columnar();
         self.insert(&mut target)
     }
 
