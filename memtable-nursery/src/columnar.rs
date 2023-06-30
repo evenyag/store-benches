@@ -409,3 +409,19 @@ fn concat_vector(left: &VectorRef, right: &VectorRef) -> VectorRef {
     let array = datatypes::arrow::compute::concat(&[&left_array, &right_array]).unwrap();
     Helper::try_into_vector(array).unwrap()
 }
+
+#[cfg(test)]
+mod tests {
+    use string_interner::Symbol;
+
+    use super::*;
+
+    #[test]
+    fn test_string_interner() {
+        let mut interner = StringInterner::default();
+        let a = interner.get_or_intern("a");
+        assert_eq!(0, a.to_usize());
+        let b = interner.get_or_intern("b");
+        assert_eq!(1, b.to_usize());
+    }
+}
