@@ -6,7 +6,7 @@ use std::sync::Arc;
 use datatypes::arrow::datatypes::{DataType, TimeUnit};
 use datatypes::arrow::record_batch::RecordBatch;
 use datatypes::vectors::{Float64Vector, StringVector, TimestampMillisecondVector, VectorRef};
-use memtable_nursery::columnar::ColumnarMemtable;
+use memtable_nursery::columnar::{ColumnarConfig, ColumnarMemtable};
 use storage::memtable::btree::BTreeMemtable;
 use storage::memtable::{IterContext, KeyValues, MemtableRef};
 use storage::metadata::RegionMetadata;
@@ -53,11 +53,11 @@ impl MemtableTarget {
     }
 
     /// Create a memtable target with columnar memtable.
-    pub fn new_columnar() -> MemtableTarget {
+    pub fn new_columnar(config: ColumnarConfig) -> MemtableTarget {
         let schema = cpu_region_schema();
         MemtableTarget {
             schema: schema.clone(),
-            memtable: Arc::new(ColumnarMemtable::new(schema)),
+            memtable: Arc::new(ColumnarMemtable::new(schema, config)),
             sequence: AtomicU64::new(0),
         }
     }

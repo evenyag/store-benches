@@ -30,6 +30,7 @@ use engine_bencher::memtable::scan_bench::ScanMemtableBench;
 use engine_bencher::put_bench::PutBench;
 use engine_bencher::scan_bench::ScanBench;
 use engine_bencher::target::Target;
+use memtable_nursery::columnar::ColumnarConfig;
 use once_cell::sync::Lazy;
 use tikv_jemallocator::Jemalloc;
 
@@ -418,9 +419,16 @@ fn bench_scan_columnar_memtable(c: &mut Criterion) {
     logging::info!("Start scan columnar memtable bench");
 
     let mut input = (ctx, scan_bench);
-    input.1.init_columnar();
+    input.1.init_columnar(ColumnarConfig { use_dict: false });
     group.bench_with_input(
-        BenchmarkId::new("columnar", parquet_path),
+        BenchmarkId::new("columnar", parquet_path.clone()),
+        &input,
+        |b, input| scan_memtable_iter(b, input),
+    );
+
+    input.1.init_columnar(ColumnarConfig { use_dict: true });
+    group.bench_with_input(
+        BenchmarkId::new("columnar-dict", parquet_path),
         &input,
         |b, input| scan_memtable_iter(b, input),
     );

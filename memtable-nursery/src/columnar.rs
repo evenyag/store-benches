@@ -3,6 +3,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 
+use datatypes::arrow::array::{ArrayRef, DictionaryArray, StringArray, UInt32Array};
+use datatypes::arrow::datatypes::UInt32Type;
 use datatypes::prelude::ConcreteDataType;
 use datatypes::scalars::ScalarVector;
 use datatypes::types::{TimestampMillisecondType, TimestampType};
@@ -15,7 +17,14 @@ use storage::memtable::{
 use storage::read::Batch;
 use storage::schema::compat::ReadAdapter;
 use storage::schema::{ProjectedSchema, ProjectedSchemaRef, RegionSchemaRef};
-use string_interner::{DefaultSymbol, StringInterner};
+use string_interner::{DefaultSymbol, StringInterner, Symbol};
+
+/// Config for columnar memtable.
+#[derive(Debug, Default, Clone)]
+pub struct ColumnarConfig {
+    /// Use dictionary array to scan.
+    pub use_dict: bool,
+}
 
 /// Memtable that organizes data in columnar form.
 #[derive(Debug)]
@@ -25,11 +34,12 @@ pub struct ColumnarMemtable {
     interners: Arc<ColumnInterners>,
     row_groups: Arc<RowGroupList>,
     allocated: AtomicUsize,
+    config: ColumnarConfig,
 }
 
 impl ColumnarMemtable {
     /// Returns a new [ColumnarMemtable] with specific `schema`.
-    pub fn new(schema: RegionSchemaRef) -> ColumnarMemtable {
+    pub fn new(schema: RegionSchemaRef, config: ColumnarConfig) -> ColumnarMemtable {
         let interners = Arc::new(ColumnInterners::new(&schema));
 
         ColumnarMemtable {
@@ -37,6 +47,7 @@ impl ColumnarMemtable {
             interners,
             row_groups: Arc::new(RowGroupList::default()),
             allocated: AtomicUsize::new(0),
+            config,
         }
     }
 
@@ -70,6 +81,7 @@ impl Memtable for ColumnarMemtable {
         assert!(ctx.batch_size > 0);
 
         let iter = IterImpl::new(
+            self.config.clone(),
             ctx,
             self.schema.clone(),
             self.interners.clone(),
@@ -153,7 +165,7 @@ impl ColumnInterners {
     }
 
     /// Resolve list of [MaybeInternedVector] to vectors.
-    fn resolve_keys(&self, keys: &[MaybeInternedVector]) -> Vec<VectorRef> {
+    fn resolve_keys(&self, keys: &[MaybeInternedVector], use_dict: bool) -> Vec<VectorRef> {
         assert_eq!(keys.len() + 1, self.key_interners.len());
         keys.iter()
             .zip(self.key_interners.iter())
@@ -163,7 +175,11 @@ impl ColumnInterners {
                     MaybeInternedVector::Interned(symbols) => {
                         // Safety: this column is interned so the key interner must exists.
                         let interner = interner_opt.as_ref().unwrap();
-                        interner.resolve(&symbols)
+                        if use_dict {
+                            interner.resolve_as_dict(symbols)
+                        } else {
+                            interner.resolve(symbols)
+                        }
                     }
                 }
             })
@@ -171,8 +187,13 @@ impl ColumnInterners {
     }
 
     /// Resolve row group to batch.
-    fn resolve(&self, row_group: &RowGroup, adapter: &ReadAdapter) -> Result<Batch> {
-        let mut keys = self.resolve_keys(&row_group.keys);
+    fn resolve(
+        &self,
+        row_group: &RowGroup,
+        adapter: &ReadAdapter,
+        use_dict: bool,
+    ) -> Result<Batch> {
+        let mut keys = self.resolve_keys(&row_group.keys, use_dict);
         keys.push(row_group.timestamp.clone());
 
         let keys = keys
@@ -211,6 +232,7 @@ impl ColumnInterners {
 #[derive(Debug, Default)]
 struct KeyInterner {
     interner: RwLock<StringInterner>,
+    cache: RwLock<Option<StringArray>>,
 }
 
 impl KeyInterner {
@@ -238,6 +260,46 @@ impl KeyInterner {
             .collect();
 
         Arc::new(StringVector::from(values))
+    }
+
+    /// Resolve symbols to vector by dict.
+    fn resolve_as_dict(&self, symbols: &[Option<DefaultSymbol>]) -> VectorRef {
+        // Currently, we don't support dictionary vector, so we create a dictionary
+        // array but returns its keys only.
+        let dict_array = self.resolve_to_dict_array(symbols);
+        let keys: ArrayRef = Arc::new(dict_array.keys().clone());
+        Helper::try_into_vector(keys).unwrap()
+    }
+
+    /// Resolve symbols to dictionary array.
+    fn resolve_to_dict_array(
+        &self,
+        symbols: &[Option<DefaultSymbol>],
+    ) -> DictionaryArray<UInt32Type> {
+        let values = self.interned_values();
+        let keys = UInt32Array::from_iter(symbols.iter().map(|symbol_opt| {
+            symbol_opt.map(|symbol| {
+                // Safety: DefaultSymbol is SymbolU32.
+                symbol.to_usize() as u32
+            })
+        }));
+
+        DictionaryArray::new(keys, Arc::new(values))
+    }
+
+    /// Return array of values.
+    fn interned_values(&self) -> StringArray {
+        {
+            if let Some(cache) = self.cache.read().unwrap().as_ref() {
+                return cache.clone();
+            }
+        }
+
+        let interner = self.interner.read().unwrap();
+        let array =
+            StringArray::from_iter_values(interner.into_iter().map(|(_symbol, value)| value));
+        *self.cache.write().unwrap() = Some(array.clone());
+        array
     }
 }
 
@@ -296,6 +358,7 @@ impl RowGroupList {
 
 /// Iterator implementation.
 struct IterImpl {
+    config: ColumnarConfig,
     ctx: IterContext,
     /// Projected schema that user expect to read.
     projected_schema: ProjectedSchemaRef,
@@ -311,6 +374,7 @@ struct IterImpl {
 impl IterImpl {
     /// Returns a new [IterImpl].
     fn new(
+        config: ColumnarConfig,
         ctx: IterContext,
         schema: RegionSchemaRef,
         interners: Arc<ColumnInterners>,
@@ -323,6 +387,7 @@ impl IterImpl {
         let adapter = ReadAdapter::new(schema.store_schema().clone(), projected_schema.clone())?;
 
         Ok(IterImpl {
+            config,
             ctx,
             projected_schema,
             adapter,
@@ -336,7 +401,9 @@ impl IterImpl {
     fn next_batch(&mut self) -> Result<Option<Batch>> {
         while !self.is_batch_enough() {
             if let Some(row_group) = self.row_groups.pop() {
-                let batch = self.interners.resolve(&row_group, &self.adapter)?;
+                let batch =
+                    self.interners
+                        .resolve(&row_group, &self.adapter, self.config.use_dict)?;
                 if let Some(buffered) = self.batch.take() {
                     self.batch = Some(concat_batch(&buffered, &batch));
                 } else {
@@ -423,5 +490,10 @@ mod tests {
         assert_eq!(0, a.to_usize());
         let b = interner.get_or_intern("b");
         assert_eq!(1, b.to_usize());
+
+        let keys: Vec<_> = interner.into_iter().collect();
+        assert_eq!(2, keys.len());
+        assert_eq!((0, "a"), (keys[0].0.to_usize(), keys[0].1));
+        assert_eq!((1, "b"), (keys[1].0.to_usize(), keys[1].1));
     }
 }
