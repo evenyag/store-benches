@@ -7,6 +7,7 @@ use datatypes::arrow::datatypes::{DataType, TimeUnit};
 use datatypes::arrow::record_batch::RecordBatch;
 use datatypes::vectors::{Float64Vector, StringVector, TimestampMillisecondVector, VectorRef};
 use memtable_nursery::columnar::{ColumnarConfig, ColumnarMemtable};
+use memtable_nursery::series::{SeriesConfig, SeriesMemtable};
 use storage::memtable::btree::BTreeMemtable;
 use storage::memtable::{IterContext, KeyValues, MemtableRef};
 use storage::metadata::RegionMetadata;
@@ -58,6 +59,16 @@ impl MemtableTarget {
         MemtableTarget {
             schema: schema.clone(),
             memtable: Arc::new(ColumnarMemtable::new(schema, config)),
+            sequence: AtomicU64::new(0),
+        }
+    }
+
+    /// Create a memtable target with series memtable.
+    pub fn new_series(config: SeriesConfig) -> MemtableTarget {
+        let schema = cpu_region_schema();
+        MemtableTarget {
+            schema: schema.clone(),
+            memtable: Arc::new(SeriesMemtable::new(schema, config)),
             sequence: AtomicU64::new(0),
         }
     }

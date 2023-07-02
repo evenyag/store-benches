@@ -4,6 +4,7 @@ use std::fmt;
 use std::time::{Duration, Instant};
 
 use memtable_nursery::columnar::ColumnarConfig;
+use memtable_nursery::series::SeriesConfig;
 
 use crate::loader::ParquetLoader;
 use crate::memory::{DisplayBytes, MemoryMetrics};
@@ -60,6 +61,12 @@ impl InsertMemtableBench {
     /// Run benchmark for ColumnarMemtable.
     pub fn bench_columnar(&self) -> InsertMetrics {
         let mut target = MemtableTarget::new_columnar(ColumnarConfig::default());
+        self.insert(&mut target)
+    }
+
+    /// Run benchmark for SeriesMemtable.
+    pub fn bench_series(&self) -> InsertMetrics {
+        let mut target = MemtableTarget::new_series(SeriesConfig::default());
         self.insert(&mut target)
     }
 

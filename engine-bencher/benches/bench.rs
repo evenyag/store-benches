@@ -363,6 +363,43 @@ fn bench_insert_columnar_memtable(c: &mut Criterion) {
     group.finish();
 }
 
+fn insert_series_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
+    b.iter(|| {
+        let metrics = input.1.bench_series();
+
+        input.0.maybe_print_log(&metrics);
+    })
+}
+
+fn bench_insert_series_memtable(c: &mut Criterion) {
+    let config = init_bench();
+
+    let mut group = c.benchmark_group("insert_series_memtable");
+
+    if let Some(v) = config.insert_memtable.measurement_time {
+        group.measurement_time(v);
+    }
+    if let Some(v) = config.insert_memtable.sample_size {
+        group.sample_size(v);
+    }
+
+    let parquet_path = config.parquet_path.clone();
+    let ctx = BenchContext::new(config);
+    let insert_bench = ctx.new_insert_memtable_bench();
+
+    logging::info!("Start insert series memtable bench");
+
+    let input = (ctx, insert_bench);
+    // series
+    group.bench_with_input(
+        BenchmarkId::new("series", parquet_path.clone()),
+        &input,
+        |b, input| insert_series_iter(b, input),
+    );
+
+    group.finish();
+}
+
 fn scan_memtable_iter(b: &mut Bencher<'_>, input: &(BenchContext, ScanMemtableBench)) {
     b.iter(|| {
         let metrics = input.1.bench(input.0.config.scan_memtable.scan_batch_size);
@@ -445,6 +482,7 @@ criterion_group!(
               bench_insert_columnar_memtable,
               bench_scan_btree_memtable,
               bench_scan_columnar_memtable,
+              bench_insert_series_memtable,
 );
 
 criterion_main!(benches);
