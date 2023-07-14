@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
+use datatypes::arrow;
 
 use datatypes::arrow::row::{RowConverter, Rows, SortField};
 use datatypes::prelude::DataType;
@@ -89,15 +90,22 @@ impl SeriesMemtable {
     ///
     /// Returns the indices and rows.
     fn lexsort_to_indices(&self, kvs: &KeyValues) -> (UInt32Vector, Rows) {
-        let fields = kvs
+        let mut fields = kvs
             .keys
             .iter()
             .map(|v| {
                 let arrow_type = v.data_type().as_arrow_type();
                 SortField::new(arrow_type)
             })
-            .collect();
-        let columns: Vec<_> = kvs.keys.iter().map(|v| v.to_arrow_array()).collect();
+            .collect::<Vec<_>>();
+
+        let mut columns = kvs.keys.iter().map(|v| v.to_arrow_array()).collect::<Vec<_>>();
+
+        if let Some(v) = kvs.timestamp.as_ref() {
+            fields.push(SortField::new(v.data_type().as_arrow_type()));
+            columns.push(v.to_arrow_array());
+        }
+
         let mut converter = RowConverter::new(fields).unwrap();
         let rows = converter.convert_columns(&columns).unwrap();
         let mut to_sort: Vec<_> = rows.iter().enumerate().collect();

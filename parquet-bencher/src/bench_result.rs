@@ -12,10 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt::{Debug, Formatter};
 use std::time::Duration;
 
-#[derive(Debug)]
 pub struct Metrics {
     pub output_size: usize,
     pub elapsed_time: Duration,
+}
+
+impl Debug for Metrics {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let size = (self.output_size * 100 / 1024 / 1024) as f64  / 100f64;
+        let time = self.elapsed_time.as_millis() as f64 / 1000f64;
+        f.debug_struct("Metrics").field("output_size", &size)
+            .field("elapsed_time", &time).finish()
+    }
 }
