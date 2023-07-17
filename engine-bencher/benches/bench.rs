@@ -31,6 +31,7 @@ use engine_bencher::put_bench::PutBench;
 use engine_bencher::scan_bench::ScanBench;
 use engine_bencher::target::Target;
 use memtable_nursery::columnar::ColumnarConfig;
+use memtable_nursery::series::SeriesConfig;
 use once_cell::sync::Lazy;
 use tikv_jemallocator::Jemalloc;
 
@@ -473,6 +474,35 @@ fn bench_scan_columnar_memtable(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_scan_series_memtable(c: &mut Criterion) {
+    let config = init_bench();
+
+    let mut group = c.benchmark_group("scan_series_memtable");
+
+    if let Some(v) = config.scan_memtable.measurement_time {
+        group.measurement_time(v);
+    }
+    if let Some(v) = config.scan_memtable.sample_size {
+        group.sample_size(v);
+    }
+
+    let parquet_path = config.parquet_path.clone();
+    let ctx = BenchContext::new(config);
+    let scan_bench = ctx.new_scan_memtable_bench();
+
+    logging::info!("Start scan series memtable bench");
+
+    let mut input = (ctx, scan_bench);
+    input.1.init_series(SeriesConfig::default());
+    group.bench_with_input(
+        BenchmarkId::new("series", parquet_path.clone()),
+        &input,
+        |b, input| scan_memtable_iter(b, input),
+    );
+
+    group.finish();
+}
+
 criterion_group!(
     name = benches;
     config = Criterion::default();
@@ -483,6 +513,7 @@ criterion_group!(
               bench_scan_btree_memtable,
               bench_scan_columnar_memtable,
               bench_insert_series_memtable,
+              bench_scan_series_memtable,
 );
 
 criterion_main!(benches);

@@ -8,5 +8,6 @@ edition.workspace = true
 [dependencies]
 datatypes.workspace = true
 common-base.workspace = true
+common-telemetry.workspace = true
 storage.workspace = true
 string-interner = "0.14"

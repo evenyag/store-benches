@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use common_telemetry::logging;
 use memtable_nursery::columnar::ColumnarConfig;
+use memtable_nursery::series::SeriesConfig;
 
 use crate::loader::ParquetLoader;
 use crate::memtable::source::Source;
@@ -38,6 +39,11 @@ impl ScanMemtableBench {
     /// Init ColumnarMemtable.
     pub fn init_columnar(&mut self, config: ColumnarConfig) {
         self.init_memtable(MemtableTarget::new_columnar(config));
+    }
+
+    /// Init SeriesMemtable.
+    pub fn init_series(&mut self, config: SeriesConfig) {
+        self.init_memtable(MemtableTarget::new_series(config));
     }
 
     /// Bench memtable.

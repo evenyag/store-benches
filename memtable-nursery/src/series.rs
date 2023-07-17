@@ -97,6 +97,8 @@ impl SeriesMemtable {
     fn write_key_values(&self, kvs: &KeyValues) {
         let row_group = self.sort_key_values(kvs);
 
+        assert!(row_group.num_rows() > 0);
+
         self.row_groups.push(row_group);
     }
 
@@ -297,7 +299,12 @@ impl Node {
     /// # Panics
     /// Panics if `self` is EOF.
     fn push_next_row_to(&mut self, builder: &mut BatchBuilder) {
-        self.cursor.as_mut().unwrap().push_next_row_to(builder)
+        let cursor = self.cursor.as_mut().unwrap();
+        cursor.push_next_row_to(builder);
+
+        if cursor.pos == cursor.batch.num_rows() {
+            self.cursor = None;
+        }
     }
 }
 

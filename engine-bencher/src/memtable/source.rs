@@ -30,9 +30,11 @@ impl Source {
 
         for batch in reader {
             let batch = batch.unwrap();
-            if batch.num_rows() + rows_loaded > self.rows_to_insert {
-                self.batches
-                    .push(batch.slice(0, self.rows_to_insert - rows_loaded));
+            assert!(batch.num_rows() > 0);
+
+            if batch.num_rows() + rows_loaded >= self.rows_to_insert {
+                let sliced = batch.slice(0, self.rows_to_insert - rows_loaded);
+                self.batches.push(sliced);
                 rows_loaded = self.rows_to_insert;
                 break;
             } else {
@@ -42,9 +44,10 @@ impl Source {
         }
 
         logging::info!(
-            "Insert bench at most load {} rows, load {} rows actually",
+            "Insert bench at most load {} rows, load {} rows actually, num batches: {}",
             self.rows_to_insert,
-            rows_loaded
+            rows_loaded,
+            self.batches.len(),
         );
         self.rows_to_insert = rows_loaded;
     }
@@ -57,6 +60,7 @@ impl Source {
     /// Insert all data to the inserter.
     pub(crate) fn insert<T: Inserter>(&self, inserter: &mut T) {
         for batch in &self.batches {
+            assert!(batch.num_rows() > 0, "{}", self.batches.len());
             inserter.insert(batch);
         }
     }
