@@ -30,7 +30,7 @@ use log_store::LogConfig;
 use object_store::layers::{LoggingLayer, MetricsLayer, TracingLayer};
 use object_store::services::Fs;
 use object_store::{util, ObjectStore};
-use storage::compaction::{CompactionHandler, CompactionSchedulerRef, SimplePicker};
+use storage::compaction::{CompactionHandler, CompactionSchedulerRef};
 use storage::config::EngineConfig;
 use storage::region::RegionImpl;
 use storage::scheduler::{LocalScheduler, SchedulerConfig};
@@ -88,11 +88,10 @@ async fn new_log_store(path: &str) -> RaftEngineLogStore {
 
 /// Returns a new compaction scheduler.
 fn new_compaction_scheduler<S: LogStore>() -> CompactionSchedulerRef<S> {
-    let picker = SimplePicker::default();
     let config = SchedulerConfig {
         max_inflight_tasks: 4,
     };
-    let handler = CompactionHandler { picker };
+    let handler = CompactionHandler::default();
     let scheduler = LocalScheduler::new(config, handler);
     Arc::new(scheduler)
 }

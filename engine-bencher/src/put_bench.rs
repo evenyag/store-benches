@@ -151,6 +151,6 @@ impl PutBench {
         self.maybe_clean_data();
 
         // Use 1 as region id.
-        Target::new(&self.path, self.engine_config.clone(), 1).await
+        Target::new(&self.path, self.engine_config.clone(), 1.into()).await
     }
 }

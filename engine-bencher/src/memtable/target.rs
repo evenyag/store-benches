@@ -134,7 +134,6 @@ impl Scanner for MemtableTarget {
     fn scan_all(&self, batch_size: usize) -> usize {
         let ctx = IterContext {
             batch_size,
-            for_flush: false,
             ..Default::default()
         };
         let mut num_scanned = 0;
@@ -149,7 +148,7 @@ impl Scanner for MemtableTarget {
 }
 
 fn cpu_region_schema() -> RegionSchemaRef {
-    let desc = new_cpu_region_descriptor("cpu", 0);
+    let desc = new_cpu_region_descriptor("cpu", 0.into());
     let metadata = RegionMetadata::try_from(desc).unwrap();
     metadata.schema().clone()
 }

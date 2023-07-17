@@ -87,7 +87,7 @@ impl Default for ScanConfig {
             measurement_time: None,
             sample_size: None,
             path: "/tmp/storage-bencher/".to_string(),
-            region_id: 0,
+            region_id: 0.into(),
             load_batch_size: 1024,
             scan_batch_size: 1024,
         }
