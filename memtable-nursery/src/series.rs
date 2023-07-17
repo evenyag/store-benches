@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
-use datatypes::arrow;
 
+use common_base::bytes::Bytes;
 use datatypes::arrow::row::{RowConverter, Rows, SortField};
 use datatypes::prelude::DataType;
 use datatypes::scalars::ScalarVector;
@@ -99,7 +99,11 @@ impl SeriesMemtable {
             })
             .collect::<Vec<_>>();
 
-        let mut columns = kvs.keys.iter().map(|v| v.to_arrow_array()).collect::<Vec<_>>();
+        let mut columns = kvs
+            .keys
+            .iter()
+            .map(|v| v.to_arrow_array())
+            .collect::<Vec<_>>();
 
         if let Some(v) = kvs.timestamp.as_ref() {
             fields.push(SortField::new(v.data_type().as_arrow_type()));
@@ -108,7 +112,16 @@ impl SeriesMemtable {
 
         let mut converter = RowConverter::new(fields).unwrap();
         let rows = converter.convert_columns(&columns).unwrap();
-        let mut to_sort: Vec<_> = rows.iter().enumerate().collect();
+        let mut to_sort: Vec<_> = rows
+            .iter()
+            .enumerate()
+            .map(|(index, key)| {
+                (
+                    index,
+                    (key, u64::MAX - kvs.sequence, u8::MAX - kvs.op_type.as_u8()),
+                )
+            })
+            .collect();
         to_sort.sort_unstable_by(|(_, a), (_, b)| a.cmp(b));
 
         let indices = UInt32Vector::from_iter_values(to_sort.iter().map(|(i, _)| *i as u32));
@@ -143,7 +156,9 @@ impl SeriesMemtable {
                 |v| {
                     let row_idx = v.unwrap();
                     let row = rows.row(row_idx as usize);
-                    interner.get_or_intern(row.as_ref())
+                    // Skip the last timestamp.
+                    let series_key = &row.as_ref()[..row.as_ref().len() - 9];
+                    interner.get_or_intern(series_key)
                 },
             )))
         };
@@ -160,7 +175,7 @@ impl SeriesMemtable {
 
 #[derive(Debug, Default)]
 struct ByteInterner {
-    map: HashMap<Vec<u8>, u32>,
+    map: HashMap<Bytes, u32>,
     next_id: u32,
 }
 
@@ -172,7 +187,7 @@ impl ByteInterner {
 
         let id = self.next_id;
         self.next_id += 1;
-        self.map.insert(value.to_vec(), id);
+        self.map.insert(value.into(), id);
         id
     }
 }

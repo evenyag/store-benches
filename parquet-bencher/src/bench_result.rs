@@ -22,9 +22,11 @@ pub struct Metrics {
 
 impl Debug for Metrics {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let size = (self.output_size * 100 / 1024 / 1024) as f64  / 100f64;
+        let size = (self.output_size * 100 / 1024 / 1024) as f64 / 100f64;
         let time = self.elapsed_time.as_millis() as f64 / 1000f64;
-        f.debug_struct("Metrics").field("output_size", &size)
-            .field("elapsed_time", &time).finish()
+        f.debug_struct("Metrics")
+            .field("output_size", &size)
+            .field("elapsed_time", &time)
+            .finish()
     }
 }
