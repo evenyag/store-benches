@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use common_telemetry::logging;
 use memtable_nursery::columnar::ColumnarConfig;
+use memtable_nursery::plain_vector::PlainVectorConfig;
 use memtable_nursery::series::SeriesConfig;
 
 use crate::loader::ParquetLoader;
@@ -44,6 +45,11 @@ impl ScanMemtableBench {
     /// Init SeriesMemtable.
     pub fn init_series(&mut self, config: SeriesConfig) {
         self.init_memtable(MemtableTarget::new_series(config));
+    }
+
+    /// Init PlainVectorMemtable
+    pub fn init_plain_vector(&mut self, config: PlainVectorConfig) {
+        self.init_memtable(MemtableTarget::new_plain_vector(config));
     }
 
     /// Bench memtable.

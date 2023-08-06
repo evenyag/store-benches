@@ -34,6 +34,7 @@ use memtable_nursery::columnar::ColumnarConfig;
 use memtable_nursery::series::SeriesConfig;
 use once_cell::sync::Lazy;
 use tikv_jemallocator::Jemalloc;
+use memtable_nursery::plain_vector::PlainVectorConfig;
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
@@ -372,6 +373,13 @@ fn insert_series_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtable
     })
 }
 
+fn insert_vector_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
+    b.iter(|| {
+        let metrics = input.1.bench_plain_vector();
+        input.0.maybe_print_log(&metrics);
+    })
+}
+
 fn bench_insert_series_memtable(c: &mut Criterion) {
     let config = init_bench();
 
@@ -396,6 +404,35 @@ fn bench_insert_series_memtable(c: &mut Criterion) {
         BenchmarkId::new("series", parquet_path.clone()),
         &input,
         |b, input| insert_series_iter(b, input),
+    );
+
+    group.finish();
+}
+
+fn bench_insert_plain_vector_memtable(c: &mut Criterion) {
+    let config = init_bench();
+
+    let mut group = c.benchmark_group("insert_plain_vector_memtable");
+
+    if let Some(v) = config.insert_memtable.measurement_time {
+        group.measurement_time(v);
+    }
+    if let Some(v) = config.insert_memtable.sample_size {
+        group.sample_size(v);
+    }
+
+    let parquet_path = config.parquet_path.clone();
+    let ctx = BenchContext::new(config);
+    let insert_bench = ctx.new_insert_memtable_bench();
+
+    logging::info!("Start insert plain_vector memtable bench");
+
+    let input = (ctx, insert_bench);
+    // series
+    group.bench_with_input(
+        BenchmarkId::new("plain_vector", parquet_path.clone()),
+        &input,
+        |b, input| insert_vector_iter(b, input),
     );
 
     group.finish();
@@ -503,12 +540,44 @@ fn bench_scan_series_memtable(c: &mut Criterion) {
     group.finish();
 }
 
+
+fn bench_scan_plain_vector_memtable(c: &mut Criterion) {
+    let config = init_bench();
+
+    let mut group = c.benchmark_group("scan_plain_vector_memtable");
+
+    if let Some(v) = config.scan_memtable.measurement_time {
+        group.measurement_time(v);
+    }
+    if let Some(v) = config.scan_memtable.sample_size {
+        group.sample_size(v);
+    }
+
+    let parquet_path = config.parquet_path.clone();
+    let ctx = BenchContext::new(config);
+    let scan_bench = ctx.new_scan_memtable_bench();
+
+    logging::info!("Start scan series memtable bench");
+
+    let mut input = (ctx, scan_bench);
+    input.1.init_plain_vector(PlainVectorConfig::default());
+    group.bench_with_input(
+        BenchmarkId::new("plain_vector", parquet_path.clone()),
+        &input,
+        |b, input| scan_memtable_iter(b, input),
+    );
+
+    group.finish();
+}
+
 criterion_group!(
     name = benches;
     config = Criterion::default();
     targets = bench_full_scan,
               bench_put,
               bench_insert_btree_memtable,
+              bench_insert_plain_vector_memtable,
+              bench_scan_plain_vector_memtable,
               bench_insert_columnar_memtable,
               bench_scan_btree_memtable,
               bench_scan_columnar_memtable,
