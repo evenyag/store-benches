@@ -167,16 +167,3 @@ fn cpu_region_schema() -> RegionSchemaRef {
 fn new_btree_memtable(schema: RegionSchemaRef) -> BTreeMemtable {
     BTreeMemtable::new(1, schema, None)
 }
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-     #[test]
-    fn test_new_memtable() {
-         let target = MemtableTarget::new_plain_vector(PlainVectorConfig::default());
-         let i = target.scan_all(100);
-         println!("i: {:?}", i);
-    }
-}
