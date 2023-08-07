@@ -13,6 +13,7 @@ use storage::memtable::{IterContext, KeyValues, MemtableRef};
 use storage::metadata::RegionMetadata;
 use storage::schema::RegionSchemaRef;
 use store_api::storage::OpType;
+use memtable_nursery::plain_vector::{PlainVectorConfig, PlainVectorMemtable};
 
 use crate::target::{new_cpu_region_descriptor, TS_COLUMN_NAME};
 
@@ -69,6 +70,16 @@ impl MemtableTarget {
         MemtableTarget {
             schema: schema.clone(),
             memtable: Arc::new(SeriesMemtable::new(schema, config)),
+            sequence: AtomicU64::new(0),
+        }
+    }
+
+    /// Create a memtable target with plain vector memtable.
+    pub fn new_plain_vector(_config: PlainVectorConfig) -> MemtableTarget {
+        let schema = cpu_region_schema();
+        MemtableTarget {
+            schema: schema.clone(),
+            memtable: Arc::new(PlainVectorMemtable::new(schema)),
             sequence: AtomicU64::new(0),
         }
     }
