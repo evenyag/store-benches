@@ -13,6 +13,7 @@ members = [
 
 [workspace.dependencies]
 arrow-array = "40"
+arrow-row = "40"
 arrow-schema = "40"
 common-base = { git = "https://github.com/evenyag/greptimedb.git", rev = "a599a211d28f626b2745226837b3869488c8f839" }
 common-runtime = { git = "https://github.com/evenyag/greptimedb.git", rev = "a599a211d28f626b2745226837b3869488c8f839" }
