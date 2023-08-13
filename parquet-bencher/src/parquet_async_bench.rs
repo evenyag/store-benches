@@ -4,10 +4,13 @@
 
 use std::time::Instant;
 
+use arrow_array::RecordBatch;
 use async_compat::CompatExt;
+use futures_util::stream::BoxStream;
 use futures_util::TryStreamExt;
 use opendal::Operator;
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
+use parquet::errors::ParquetError;
 use tokio::io::BufReader;
 
 use crate::parquet_bench::Metrics;
@@ -17,6 +20,7 @@ pub struct ParquetAsyncBench {
     file_path: String,
     batch_size: usize,
     columns: Vec<usize>,
+    use_async_trait: bool,
 }
 
 impl ParquetAsyncBench {
@@ -26,11 +30,17 @@ impl ParquetAsyncBench {
             file_path,
             batch_size,
             columns: Vec::new(),
+            use_async_trait: false,
         }
     }
 
     pub fn with_columns(mut self, columns: Vec<usize>) -> Self {
         self.columns = columns;
+        self
+    }
+
+    pub fn with_async_trait(mut self, use_async_trait: bool) -> Self {
+        self.use_async_trait = use_async_trait;
         self
     }
 
@@ -65,8 +75,17 @@ impl ParquetAsyncBench {
         let build_cost = start.elapsed();
 
         let mut num_rows = 0;
-        while let Some(batch) = stream.try_next().await.unwrap() {
-            num_rows += batch.num_rows();
+        if self.use_async_trait {
+            let mut batch_reader = StreamReader {
+                stream: Box::pin(stream),
+            };
+            while let Some(batch) = batch_reader.next_batch().await.unwrap() {
+                num_rows += batch.num_rows();
+            }
+        } else {
+            while let Some(batch) = stream.try_next().await.unwrap() {
+                num_rows += batch.num_rows();
+            }
         }
         let scan_cost = start.elapsed();
 
@@ -77,5 +96,23 @@ impl ParquetAsyncBench {
             num_rows,
             num_columns,
         }
+    }
+}
+
+type BoxedRecordBatchStream = BoxStream<'static, std::result::Result<RecordBatch, ParquetError>>;
+
+#[async_trait::async_trait]
+trait BatchReader {
+    async fn next_batch(&mut self) -> Result<Option<RecordBatch>, ParquetError>;
+}
+
+struct StreamReader {
+    stream: BoxedRecordBatchStream,
+}
+
+#[async_trait::async_trait]
+impl BatchReader for StreamReader {
+    async fn next_batch(&mut self) -> Result<Option<RecordBatch>, ParquetError> {
+        self.stream.try_next().await
     }
 }
