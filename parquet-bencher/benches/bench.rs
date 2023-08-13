@@ -75,7 +75,8 @@ fn bench_parquet_async(c: &mut Criterion) {
     group.measurement_time(config.measurement_time);
     group.sample_size(config.sample_size);
 
-    let builder = Fs::default();
+    let mut builder = Fs::default();
+    builder.root("/");
     let operator = Operator::new(builder).unwrap().finish();
 
     let bench = ParquetAsyncBench::new(

@@ -28,5 +28,5 @@ parquet = "43"
 serde = { version = "1", features = ["derive"] }
 storage = { git = "https://github.com/evenyag/greptimedb.git", rev = "cd9b621715689591b84d457c013ec1bed6e83873" }
 store-api = { git = "https://github.com/evenyag/greptimedb.git", rev = "cd9b621715689591b84d457c013ec1bed6e83873" }
-tokio = "1"
+tokio = { version = "1", features = ["rt-multi-thread"] }
 toml = "0.7"
