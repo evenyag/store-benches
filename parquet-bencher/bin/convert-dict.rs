@@ -28,6 +28,9 @@ struct Args {
     /// Use dictionary for primary key.
     #[arg(long, default_value_t = false)]
     enable_pk_dict: bool,
+    /// Does nothing.
+    #[arg(long, default_value_t = false)]
+    raw: bool,
 }
 
 fn main() {
@@ -57,6 +60,8 @@ fn convert_to_dict(args: &Args) {
         .unwrap();
     let output_schema = if args.to_pk {
         pk_schema(&input_schema, args.enable_pk_dict)
+    } else if args.raw {
+        input_schema.clone()
     } else {
         dict_schema(&input_schema)
     };
@@ -71,6 +76,8 @@ fn convert_to_dict(args: &Args) {
         let batch = rb.unwrap();
         let batch = if args.to_pk {
             pk_batch(batch, output_schema.clone(), args.enable_pk_dict)
+        } else if args.raw {
+            batch
         } else {
             dict_batch(batch, output_schema.clone())
         };
