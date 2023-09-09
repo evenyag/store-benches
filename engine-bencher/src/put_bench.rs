@@ -132,7 +132,9 @@ impl PutBench {
     fn maybe_clean_data(&self) {
         logging::info!("Try to clean dir: {}", self.path);
 
-        let Ok(metadata) = fs::metadata(&self.path) else { return; };
+        let Ok(metadata) = fs::metadata(&self.path) else {
+            return;
+        };
         if metadata.is_dir() {
             logging::info!("Clean dir: {}", self.path);
             if let Err(e) = fs::remove_dir_all(&self.path) {
