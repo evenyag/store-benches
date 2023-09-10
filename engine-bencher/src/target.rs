@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use common_base::readable_size::ReadableSize;
+use common_config::WalConfig;
 use common_telemetry::logging;
 use datatypes::arrow::compute::cast;
 use datatypes::arrow::datatypes::{DataType, TimeUnit};
@@ -26,7 +27,6 @@ use datatypes::arrow::record_batch::RecordBatch;
 use datatypes::prelude::ConcreteDataType;
 use datatypes::vectors::Helper;
 use log_store::raft_engine::log_store::RaftEngineLogStore;
-use log_store::LogConfig;
 use object_store::layers::{LoggingLayer, MetricsLayer, TracingLayer};
 use object_store::services::Fs;
 use object_store::{util, ObjectStore};
@@ -74,16 +74,17 @@ async fn new_fs_object_store(path: &str) -> ObjectStore {
 async fn new_log_store(path: &str) -> RaftEngineLogStore {
     // create WAL directory
     fs::create_dir_all(Path::new(path)).unwrap();
-    let log_config = LogConfig {
-        file_size: ReadableSize::gb(1).0,
-        log_file_dir: path.to_string(),
+    let log_config = WalConfig {
+        file_size: ReadableSize::gb(1),
+        purge_threshold: ReadableSize::gb(10),
         purge_interval: Duration::from_secs(600),
-        purge_threshold: ReadableSize::gb(10).0,
         read_batch_size: 128,
         sync_write: false,
     };
 
-    RaftEngineLogStore::try_new(log_config).await.unwrap()
+    RaftEngineLogStore::try_new(path.to_string(), log_config)
+        .await
+        .unwrap()
 }
 
 /// Returns a new compaction scheduler.

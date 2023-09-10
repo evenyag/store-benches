@@ -31,10 +31,10 @@ use engine_bencher::put_bench::PutBench;
 use engine_bencher::scan_bench::ScanBench;
 use engine_bencher::target::Target;
 use memtable_nursery::columnar::ColumnarConfig;
+use memtable_nursery::plain_vector::PlainVectorConfig;
 use memtable_nursery::series::SeriesConfig;
 use once_cell::sync::Lazy;
 use tikv_jemallocator::Jemalloc;
-use memtable_nursery::plain_vector::PlainVectorConfig;
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
@@ -539,7 +539,6 @@ fn bench_scan_series_memtable(c: &mut Criterion) {
 
     group.finish();
 }
-
 
 fn bench_scan_plain_vector_memtable(c: &mut Criterion) {
     let config = init_bench();

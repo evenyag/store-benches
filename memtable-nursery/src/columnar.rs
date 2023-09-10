@@ -152,7 +152,7 @@ impl ColumnInterners {
             std::iter::repeat(kvs.sequence).take(timestamp.len()),
         ));
         let op_type = Arc::new(UInt8Vector::from_values(
-            std::iter::repeat(kvs.op_type.as_u8()).take(timestamp.len()),
+            std::iter::repeat(kvs.op_type as u8).take(timestamp.len()),
         ));
 
         RowGroup {

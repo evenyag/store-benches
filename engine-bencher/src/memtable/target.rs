@@ -3,17 +3,17 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use api::v1::OpType;
 use datatypes::arrow::datatypes::{DataType, TimeUnit};
 use datatypes::arrow::record_batch::RecordBatch;
 use datatypes::vectors::{Float64Vector, StringVector, TimestampMillisecondVector, VectorRef};
 use memtable_nursery::columnar::{ColumnarConfig, ColumnarMemtable};
+use memtable_nursery::plain_vector::{PlainVectorConfig, PlainVectorMemtable};
 use memtable_nursery::series::{SeriesConfig, SeriesMemtable};
 use storage::memtable::btree::BTreeMemtable;
 use storage::memtable::{IterContext, KeyValues, MemtableRef};
 use storage::metadata::RegionMetadata;
 use storage::schema::RegionSchemaRef;
-use store_api::storage::OpType;
-use memtable_nursery::plain_vector::{PlainVectorConfig, PlainVectorMemtable};
 
 use crate::target::{new_cpu_region_descriptor, TS_COLUMN_NAME};
 

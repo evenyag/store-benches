@@ -14,8 +14,9 @@
 
 use std::collections::BTreeMap;
 use std::fmt::{Debug, Formatter};
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, RwLock};
+
 use datatypes::arrow;
 use datatypes::arrow::array::{Array, PrimitiveArray, UInt32Array};
 use datatypes::arrow::datatypes::Int32Type;
@@ -23,11 +24,16 @@ use datatypes::arrow::row::{RowConverter, RowParser, SortField};
 use datatypes::data_type::DataType;
 use datatypes::prelude::{MutableVector, ScalarVectorBuilder, Value, ValueRef, Vector, VectorRef};
 use datatypes::types::{TimestampMillisecondType, TimestampType};
-use datatypes::vectors::{Helper, UInt32Vector, UInt64Vector, UInt64VectorBuilder, UInt8Vector, UInt8VectorBuilder};
-use storage::memtable::{BatchIterator, BoxedBatchIterator, IterContext, KeyValues, Memtable, MemtableId, MemtableStats, RowOrdering};
+use datatypes::vectors::{
+    Helper, UInt32Vector, UInt64Vector, UInt64VectorBuilder, UInt8Vector, UInt8VectorBuilder,
+};
+use storage::memtable::{
+    BatchIterator, BoxedBatchIterator, IterContext, KeyValues, Memtable, MemtableId, MemtableStats,
+    RowOrdering,
+};
 use storage::read::Batch;
-use storage::schema::{ProjectedSchema, ProjectedSchemaRef, RegionSchemaRef};
 use storage::schema::compat::ReadAdapter;
+use storage::schema::{ProjectedSchema, ProjectedSchemaRef, RegionSchemaRef};
 
 #[derive(Debug, Default)]
 pub struct PlainVectorConfig {}
@@ -81,11 +87,10 @@ impl Memtable for PlainVectorMemtable {
 
         rows.iter().enumerate().for_each(|(idx, row)| {
             let key_bytes = row.as_ref().to_vec();
-            let values: Vec<_> = kvs.values.iter().map(|v| {
-                v.get(idx)
-            }).collect();
+            let values: Vec<_> = kvs.values.iter().map(|v| v.get(idx)).collect();
             let ts = kvs.timestamp.as_ref().unwrap().get(idx);
-            self.inner.push(key_bytes, ts, kvs.sequence, kvs.op_type.as_u8(), values);
+            self.inner
+                .push(key_bytes, ts, kvs.sequence, kvs.op_type as u8, values);
         });
 
         self.allocated
@@ -115,13 +120,11 @@ impl Memtable for PlainVectorMemtable {
     fn mark_immutable(&self) {}
 }
 
-
 impl Debug for PlainVectorMemtable {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "PlainVectorMemtable")
     }
 }
-
 
 struct Series {
     schema: RegionSchemaRef,
@@ -135,7 +138,6 @@ struct ValueBuilder {
     op_type: UInt8VectorBuilder,
     fields: Vec<Box<dyn MutableVector>>,
 }
-
 
 #[derive(Clone)]
 struct Values {
@@ -169,10 +171,18 @@ impl Series {
 
     fn build_value_builders(&self) -> ValueBuilder {
         let init_vector_cap = 128;
-        let value_vectors: Vec<_> = self.schema.field_columns().map(|col| {
-            col.desc.data_type.create_mutable_vector(init_vector_cap)
-        }).collect();
-        let ts_vector = self.schema.user_schema().timestamp_column().unwrap().data_type.create_mutable_vector(init_vector_cap);
+        let value_vectors: Vec<_> = self
+            .schema
+            .field_columns()
+            .map(|col| col.desc.data_type.create_mutable_vector(init_vector_cap))
+            .collect();
+        let ts_vector = self
+            .schema
+            .user_schema()
+            .timestamp_column()
+            .unwrap()
+            .data_type
+            .create_mutable_vector(init_vector_cap);
         let sequence = UInt64VectorBuilder::with_capacity(init_vector_cap);
         let op_type = UInt8VectorBuilder::with_capacity(init_vector_cap);
         ValueBuilder {
@@ -183,13 +193,18 @@ impl Series {
         }
     }
 
-    pub(crate) fn push(&self, key_bytes: Vec<u8>, ts: Value,
-                       sequence: u64,
-                       op_type: u8,
-                       values: Vec<Value>) {
+    pub(crate) fn push(
+        &self,
+        key_bytes: Vec<u8>,
+        ts: Value,
+        sequence: u64,
+        op_type: u8,
+        values: Vec<Value>,
+    ) {
         let mut map = self.active.write().unwrap();
 
-        let builders = map.get_or_insert_with(|| Default::default())
+        let builders = map
+            .get_or_insert_with(|| Default::default())
             .entry(key_bytes)
             .or_insert_with(|| self.build_value_builders());
         builders.sequence.push_value_ref(ValueRef::UInt64(sequence));
@@ -207,7 +222,10 @@ impl Series {
         if let Some(existing) = inner.take() {
             let mut frozen = self.frozen.write().unwrap();
             for (key, value_builder) in existing.into_iter() {
-                frozen.entry(key).or_default().push(crate::plain_vector::Values::from(value_builder));
+                frozen
+                    .entry(key)
+                    .or_default()
+                    .push(crate::plain_vector::Values::from(value_builder));
             }
         }
     }
@@ -228,7 +246,11 @@ struct IterImpl {
 }
 
 impl IterImpl {
-    fn new(ctx: IterContext, schema: RegionSchemaRef, frozen: BTreeMap<Vec<u8>, Vec<Values>>) -> Self {
+    fn new(
+        ctx: IterContext,
+        schema: RegionSchemaRef,
+        frozen: BTreeMap<Vec<u8>, Vec<Values>>,
+    ) -> Self {
         let projected_schema = ctx
             .projected_schema
             .clone()
@@ -238,10 +260,12 @@ impl IterImpl {
 
         let columns = store_schema.schema().column_schemas();
 
-        let key_sort_fields = (0..store_schema.row_key_end() - 1).map(|idx| {
-            let arrow_type = columns[idx].data_type.as_arrow_type();
-            SortField::new(arrow_type)
-        }).collect();
+        let key_sort_fields = (0..store_schema.row_key_end() - 1)
+            .map(|idx| {
+                let arrow_type = columns[idx].data_type.as_arrow_type();
+                SortField::new(arrow_type)
+            })
+            .collect();
 
         let row_converter = RowConverter::new(key_sort_fields).unwrap();
         let parser = row_converter.parser();
@@ -256,11 +280,24 @@ impl IterImpl {
     }
 }
 
-fn memtable_to_batch(row_key: &Vec<u8>, values: Values, time_series_row_converter: &RowConverter, parser: &RowParser, read_adaptor: &ReadAdapter) -> Option<Batch> {
+fn memtable_to_batch(
+    row_key: &Vec<u8>,
+    values: Values,
+    time_series_row_converter: &RowConverter,
+    parser: &RowParser,
+    read_adaptor: &ReadAdapter,
+) -> Option<Batch> {
     // we expected a vec of array with len 1
-    let keys = time_series_row_converter.convert_rows(vec![parser.parse(row_key)]).unwrap();
+    let keys = time_series_row_converter
+        .convert_rows(vec![parser.parse(row_key)])
+        .unwrap();
 
-    let Values { ts, sequence, op_type, fields } = values;
+    let Values {
+        ts,
+        sequence,
+        op_type,
+        fields,
+    } = values;
 
     let indices = sort_in_time_series(ts.clone(), sequence.clone(), op_type.clone());
 
@@ -271,61 +308,85 @@ fn memtable_to_batch(row_key: &Vec<u8>, values: Values, time_series_row_converte
     let col_len = ts.len();
     let repeated_idx: PrimitiveArray<Int32Type> = PrimitiveArray::from_value(0, col_len);
 
-    let mut key_arrs = keys.iter().map(|v| {
-        let expanded_key = arrow::compute::take(v, &repeated_idx, None).unwrap();
-        Helper::try_into_vector(expanded_key).unwrap()
-    }).collect::<Vec<_>>();
+    let mut key_arrs = keys
+        .iter()
+        .map(|v| {
+            let expanded_key = arrow::compute::take(v, &repeated_idx, None).unwrap();
+            Helper::try_into_vector(expanded_key).unwrap()
+        })
+        .collect::<Vec<_>>();
 
     key_arrs.push(ts.take(&indices).unwrap());
 
-    let fields_sorted = fields.into_iter().map(|f|f.take(&indices).unwrap()).collect();
-
+    let fields_sorted = fields
+        .into_iter()
+        .map(|f| f.take(&indices).unwrap())
+        .collect();
 
     let indices_arr = indices.to_arrow_array();
     let indices_arr = indices_arr.as_any().downcast_ref::<UInt32Array>().unwrap();
 
-    Some(read_adaptor.batch_from_parts(key_arrs, fields_sorted, Helper::try_into_vector(arrow::compute::take(&sequence.to_arrow_array(), indices_arr, None).unwrap()).unwrap(),
-                                       Helper::try_into_vector(arrow::compute::take(&op_type.to_arrow_array(), indices_arr, None).unwrap()).unwrap()).unwrap())
+    Some(
+        read_adaptor
+            .batch_from_parts(
+                key_arrs,
+                fields_sorted,
+                Helper::try_into_vector(
+                    arrow::compute::take(&sequence.to_arrow_array(), indices_arr, None).unwrap(),
+                )
+                .unwrap(),
+                Helper::try_into_vector(
+                    arrow::compute::take(&op_type.to_arrow_array(), indices_arr, None).unwrap(),
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+    )
 }
 
-
-fn sort_in_time_series(ts_vector: VectorRef, sequence_vector: Arc<UInt64Vector>, op_type_vector: Arc<UInt8Vector>) -> UInt32Vector {
+fn sort_in_time_series(
+    ts_vector: VectorRef,
+    sequence_vector: Arc<UInt64Vector>,
+    op_type_vector: Arc<UInt8Vector>,
+) -> UInt32Vector {
     let mut row_converter = RowConverter::new(vec![
         SortField::new(ts_vector.data_type().as_arrow_type()),
         SortField::new(arrow::datatypes::DataType::UInt64),
         SortField::new(arrow::datatypes::DataType::UInt8),
-    ]).unwrap();
-    let rows = row_converter.convert_columns(&[
-        ts_vector.to_arrow_array(),
-        sequence_vector.to_arrow_array(),
-        op_type_vector.to_arrow_array()
-    ]).unwrap();
-
+    ])
+    .unwrap();
+    let rows = row_converter
+        .convert_columns(&[
+            ts_vector.to_arrow_array(),
+            sequence_vector.to_arrow_array(),
+            op_type_vector.to_arrow_array(),
+        ])
+        .unwrap();
 
     let mut rows_with_index: Vec<_> = rows.iter().enumerate().collect();
-    rows_with_index.sort_unstable_by(|(_, a), (_, b)| {
-        a.cmp(b)
-    });
+    rows_with_index.sort_unstable_by(|(_, a), (_, b)| a.cmp(b));
 
-    UInt32Vector::from_iter_values(rows_with_index.iter().map(|(idx, _)| {
-        *idx as u32
-    }))
+    UInt32Vector::from_iter_values(rows_with_index.iter().map(|(idx, _)| *idx as u32))
 }
 
 impl Iterator for IterImpl {
     type Item = storage::error::Result<Batch>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let Some(mut first_key) = self.frozen.first_entry() else { return None; };
+        let Some(mut first_key) = self.frozen.first_entry() else {
+            return None;
+        };
         let key = first_key.key().clone();
         let values = first_key.get_mut();
         if let Some(values) = values.pop() {
-            Ok(memtable_to_batch(&key,
-                                 values,
-                                 &self.row_converter,
-                                 &self.parser,
-                                 &self.read_adaptor)
-            ).transpose()
+            Ok(memtable_to_batch(
+                &key,
+                values,
+                &self.row_converter,
+                &self.parser,
+                &self.read_adaptor,
+            ))
+            .transpose()
         } else {
             first_key.remove_entry();
             self.next()
@@ -342,4 +403,3 @@ impl BatchIterator for IterImpl {
         RowOrdering::Unordered
     }
 }
-
