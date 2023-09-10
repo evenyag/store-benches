@@ -72,29 +72,43 @@ impl BenchContext {
         }
     }
 
-    async fn new_scan_bench(&self) -> ScanBench {
+    async fn new_scan_bench(&self, run_mito: bool) -> ScanBench {
         let loader = ParquetLoader::new(
             self.config.parquet_path.clone(),
             self.config.scan.load_batch_size,
         );
+        let path = if run_mito {
+            &self.config.scan.mito_path
+        } else {
+            &self.config.scan.path
+        };
         let target = Target::new(
-            &self.config.scan.path,
+            path,
             self.config.scan.engine_config(),
+            self.config.scan.mito_config(),
             self.config.scan.region_id,
+            run_mito,
         )
         .await;
 
         ScanBench::new(loader, target, self.config.scan.scan_batch_size)
     }
 
-    fn new_put_bench(&self) -> PutBench {
+    fn new_put_bench(&self, run_mito: bool) -> PutBench {
         let loader =
             ParquetLoader::new(self.config.parquet_path.clone(), self.config.put.batch_size);
 
+        let path = if run_mito {
+            &self.config.put.mito_path
+        } else {
+            &self.config.put.path
+        };
         PutBench::new(
             loader,
-            self.config.put.path.clone(),
+            path.to_string(),
             self.config.put.engine_config(),
+            self.config.put.mito_config(),
+            run_mito,
         )
     }
 
@@ -198,13 +212,50 @@ fn bench_full_scan(c: &mut Criterion) {
     let parquet_path = config.scan.path.clone();
     let ctx = BenchContext::new(config);
     let scan_bench = ctx.runtime.block_on(async {
-        let mut scan_bench = ctx.new_scan_bench().await;
+        let mut scan_bench = ctx.new_scan_bench(false).await;
         scan_bench.maybe_prepare_data().await;
 
         scan_bench
     });
 
     logging::info!("Start full scan bench");
+
+    let input = (ctx, scan_bench);
+    group.bench_with_input(
+        BenchmarkId::new("scan", parquet_path),
+        &input,
+        |b, input| scan_storage_iter(b, input),
+    );
+
+    input.0.runtime.block_on(async {
+        input.1.shutdown().await;
+    });
+
+    group.finish();
+}
+
+fn bench_mito_full_scan(c: &mut Criterion) {
+    let config = init_bench();
+
+    let mut group = c.benchmark_group("mito_full_scan");
+
+    if let Some(v) = config.scan.measurement_time {
+        group.measurement_time(v);
+    }
+    if let Some(v) = config.scan.sample_size {
+        group.sample_size(v);
+    }
+
+    let parquet_path = config.scan.path.clone();
+    let ctx = BenchContext::new(config);
+    let scan_bench = ctx.runtime.block_on(async {
+        let mut scan_bench = ctx.new_scan_bench(true).await;
+        scan_bench.maybe_prepare_data().await;
+
+        scan_bench
+    });
+
+    logging::info!("Start mito full scan bench");
 
     let input = (ctx, scan_bench);
     group.bench_with_input(
@@ -242,9 +293,35 @@ fn bench_put(c: &mut Criterion) {
 
     let parquet_path = config.parquet_path.clone();
     let ctx = BenchContext::new(config);
-    let put_bench = ctx.new_put_bench();
+    let put_bench = ctx.new_put_bench(false);
 
     logging::info!("Start put bench");
+
+    let input = (ctx, put_bench);
+    group.bench_with_input(BenchmarkId::new("put", parquet_path), &input, |b, input| {
+        put_storage_iter(b, input)
+    });
+
+    group.finish();
+}
+
+fn bench_mito_put(c: &mut Criterion) {
+    let config = init_bench();
+
+    let mut group = c.benchmark_group("mito_put");
+
+    if let Some(v) = config.put.measurement_time {
+        group.measurement_time(v);
+    }
+    if let Some(v) = config.put.sample_size {
+        group.sample_size(v);
+    }
+
+    let parquet_path = config.parquet_path.clone();
+    let ctx = BenchContext::new(config);
+    let put_bench = ctx.new_put_bench(true);
+
+    logging::info!("Start mito put bench");
 
     let input = (ctx, put_bench);
     group.bench_with_input(BenchmarkId::new("put", parquet_path), &input, |b, input| {
@@ -572,8 +649,10 @@ fn bench_scan_plain_vector_memtable(c: &mut Criterion) {
 criterion_group!(
     name = benches;
     config = Criterion::default();
-    targets = bench_full_scan,
+    targets = bench_mito_put,
               bench_put,
+              bench_mito_full_scan,
+              bench_full_scan,
               bench_insert_btree_memtable,
               bench_insert_plain_vector_memtable,
               bench_scan_plain_vector_memtable,

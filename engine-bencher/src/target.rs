@@ -18,6 +18,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use api::helper::ColumnDataTypeWrapper;
+use api::v1::{Row, Rows, SemanticType};
 use common_base::readable_size::ReadableSize;
 use common_config::WalConfig;
 use common_telemetry::logging;
@@ -25,8 +27,12 @@ use datatypes::arrow::compute::cast;
 use datatypes::arrow::datatypes::{DataType, TimeUnit};
 use datatypes::arrow::record_batch::RecordBatch;
 use datatypes::prelude::ConcreteDataType;
+use datatypes::schema::ColumnSchema;
 use datatypes::vectors::Helper;
+use futures_util::TryStreamExt;
 use log_store::raft_engine::log_store::RaftEngineLogStore;
+use mito2::config::MitoConfig;
+use mito2::engine::MitoEngine;
 use object_store::layers::{LoggingLayer, MetricsLayer, TracingLayer};
 use object_store::services::Fs;
 use object_store::{util, ObjectStore};
@@ -37,6 +43,11 @@ use storage::scheduler::{LocalScheduler, SchedulerConfig};
 use storage::write_batch::WriteBatch;
 use storage::EngineImpl;
 use store_api::logstore::LogStore;
+use store_api::metadata::ColumnMetadata;
+use store_api::region_engine::RegionEngine;
+use store_api::region_request::{
+    RegionCloseRequest, RegionCreateRequest, RegionOpenRequest, RegionPutRequest, RegionRequest,
+};
 use store_api::storage::{
     ChunkReader, CloseOptions, ColumnDescriptorBuilder, ColumnFamilyDescriptorBuilder,
     CreateOptions, EngineContext, OpenOptions, ReadContext, Region, RegionDescriptor,
@@ -97,6 +108,32 @@ fn new_compaction_scheduler<S: LogStore>() -> CompactionSchedulerRef<S> {
     Arc::new(scheduler)
 }
 
+const CPU_TAGS: [&'static str; 10] = [
+    "hostname",
+    "region",
+    "datacenter",
+    "rack",
+    "os",
+    "arch",
+    "team",
+    "service",
+    "service_version",
+    "service_environment",
+];
+
+const CPU_FIELDS: [&'static str; 10] = [
+    "usage_user",
+    "usage_system",
+    "usage_idle",
+    "usage_nice",
+    "usage_iowait",
+    "usage_irq",
+    "usage_softirq",
+    "usage_steal",
+    "usage_guest",
+    "usage_guest_nice",
+];
+
 /// Returns descriptor for metric `cpu`.
 // e.g.
 // ```
@@ -118,20 +155,8 @@ pub(crate) fn new_cpu_region_descriptor(
     .unwrap();
     column_id += 1;
 
-    let tags = [
-        "hostname",
-        "region",
-        "datacenter",
-        "rack",
-        "os",
-        "arch",
-        "team",
-        "service",
-        "service_version",
-        "service_environment",
-    ];
     let mut row_key_builder = RowKeyDescriptorBuilder::new(timestamp);
-    for tag in tags {
+    for tag in CPU_TAGS {
         row_key_builder = row_key_builder.push_column(
             ColumnDescriptorBuilder::new(column_id, tag, ConcreteDataType::string_datatype())
                 .build()
@@ -140,20 +165,8 @@ pub(crate) fn new_cpu_region_descriptor(
         column_id += 1;
     }
     let row_key = row_key_builder.build().unwrap();
-    let fields = [
-        "usage_user",
-        "usage_system",
-        "usage_idle",
-        "usage_nice",
-        "usage_iowait",
-        "usage_irq",
-        "usage_softirq",
-        "usage_steal",
-        "usage_guest",
-        "usage_guest_nice",
-    ];
     let mut cf_builder = ColumnFamilyDescriptorBuilder::default();
-    for field in fields {
+    for field in CPU_FIELDS {
         cf_builder = cf_builder.push_column(
             ColumnDescriptorBuilder::new(column_id, field, ConcreteDataType::float64_datatype())
                 .build()
@@ -171,6 +184,51 @@ pub(crate) fn new_cpu_region_descriptor(
         .unwrap()
 }
 
+/// Returns create request for metric `cpu`.
+fn new_cpu_create_request(region_name: &str) -> RegionCreateRequest {
+    let mut column_id = 1;
+    let mut column_metadatas = Vec::new();
+    // Note that the timestamp in the input parquet file has Timestamp(Microsecond, None) type.
+    column_metadatas.push(ColumnMetadata {
+        column_schema: ColumnSchema::new(
+            TS_COLUMN_NAME,
+            ConcreteDataType::timestamp_millisecond_datatype(),
+            false,
+        ),
+        semantic_type: SemanticType::Timestamp,
+        column_id,
+    });
+    column_id += 1;
+
+    let mut primary_key = Vec::with_capacity(CPU_TAGS.len());
+    for tag in CPU_TAGS {
+        column_metadatas.push(ColumnMetadata {
+            column_schema: ColumnSchema::new(tag, ConcreteDataType::string_datatype(), true),
+            semantic_type: SemanticType::Tag,
+            column_id,
+        });
+        primary_key.push(column_id);
+        column_id += 1;
+    }
+    for field in CPU_FIELDS {
+        column_metadatas.push(ColumnMetadata {
+            column_schema: ColumnSchema::new(field, ConcreteDataType::float64_datatype(), true),
+            semantic_type: SemanticType::Field,
+            column_id,
+        });
+        column_id += 1;
+    }
+
+    RegionCreateRequest {
+        engine: "".to_string(),
+        column_metadatas,
+        primary_key,
+        create_if_not_exists: false,
+        options: HashMap::new(),
+        region_dir: region_name.to_string(),
+    }
+}
+
 /// Returns a new engine.
 async fn new_engine(path: &str, config: EngineConfig) -> EngineImpl<RaftEngineLogStore> {
     let path = util::normalize_dir(path);
@@ -183,9 +241,20 @@ async fn new_engine(path: &str, config: EngineConfig) -> EngineImpl<RaftEngineLo
     EngineImpl::new(config, log_store, object_store, compaction_scheduler).unwrap()
 }
 
+/// Returns a new mito engine.
+async fn new_mito_engine(path: &str, config: MitoConfig) -> MitoEngine {
+    let path = util::normalize_dir(path);
+    let data_dir = format!("{path}data");
+    let wal_dir = format!("{path}wal");
+
+    let object_store = new_fs_object_store(&data_dir).await;
+    let log_store = Arc::new(new_log_store(&wal_dir).await);
+    MitoEngine::new(config, log_store, object_store)
+}
+
 /// Returns the region name.
 fn region_name_by_id(region_id: RegionId) -> String {
-    format!("cpu-{region_id}")
+    format!("cpu-{}-{}", region_id.table_id(), region_id.region_number())
 }
 
 /// Creates or opens the region.
@@ -225,6 +294,39 @@ async fn init_region(
     )
 }
 
+/// Creates or opens the mito region.
+///
+/// Returns whether the region is newly created.
+async fn init_mito_region(engine: &MitoEngine, region_name: &str, region_id: RegionId) -> bool {
+    let opened = engine
+        .handle_request(
+            region_id,
+            RegionRequest::Open(RegionOpenRequest {
+                engine: "".to_string(),
+                region_dir: region_name.to_string(),
+                options: HashMap::new(),
+            }),
+        )
+        .await
+        .is_ok();
+
+    if opened {
+        logging::info!("open region {}", region_name);
+        return false;
+    }
+
+    engine
+        .handle_request(
+            region_id,
+            RegionRequest::Create(new_cpu_create_request(region_name)),
+        )
+        .await
+        .unwrap();
+    logging::info!("create region {}", region_name);
+
+    true
+}
+
 /// Put [RecordBatch] to [WriteBatch].
 fn put_record_batch_to_write_batch(batch: RecordBatch, request: &mut WriteBatch) {
     let schema = batch.schema();
@@ -247,6 +349,61 @@ fn put_record_batch_to_write_batch(batch: RecordBatch, request: &mut WriteBatch)
     request.put(data).unwrap();
 }
 
+/// Convert [RecordBatch] to [RegionPutRequest].
+fn record_batch_to_put_request(batch: RecordBatch) -> RegionPutRequest {
+    let mut vectors = Vec::with_capacity(batch.num_columns());
+    let mut schema = Vec::with_capacity(batch.num_columns());
+    for (field, array) in batch.schema().fields().iter().zip(batch.columns()) {
+        if let DataType::Timestamp(_unit, zone) = field.data_type() {
+            let timestamps = cast(
+                array,
+                &DataType::Timestamp(TimeUnit::Millisecond, zone.clone()),
+            )
+            .unwrap();
+            let vector = Helper::try_into_vector(timestamps).unwrap();
+            schema.push(api::v1::ColumnSchema {
+                column_name: TS_COLUMN_NAME.to_string(),
+                datatype: ColumnDataTypeWrapper::try_from(
+                    ConcreteDataType::timestamp_millisecond_datatype(),
+                )
+                .unwrap()
+                .datatype() as i32,
+                semantic_type: SemanticType::Timestamp as i32,
+            });
+            vectors.push(vector);
+        } else {
+            let vector = Helper::try_into_vector(array).unwrap();
+            schema.push(api::v1::ColumnSchema {
+                column_name: field.name().to_string(),
+                datatype: ColumnDataTypeWrapper::try_from(ConcreteDataType::from_arrow_type(
+                    field.data_type(),
+                ))
+                .unwrap()
+                .datatype() as i32,
+                semantic_type: if CPU_TAGS.contains(&field.name().as_str()) {
+                    SemanticType::Tag as i32
+                } else {
+                    SemanticType::Field as i32
+                },
+            });
+            vectors.push(vector);
+        }
+    }
+    let mut rows = Vec::with_capacity(batch.num_rows());
+    for row_idx in 0..batch.num_rows() {
+        let mut values = Vec::with_capacity(batch.num_columns());
+        for col_idx in 0..batch.num_columns() {
+            let value = vectors[col_idx].get(row_idx);
+            let pb_value = api::helper::to_proto_value(value).unwrap();
+            values.push(pb_value);
+        }
+        rows.push(Row { values });
+    }
+    RegionPutRequest {
+        rows: Rows { schema, rows },
+    }
+}
+
 /// Metrics of scanning a region.
 #[derive(Debug)]
 pub struct ScanMetrics {
@@ -254,22 +411,79 @@ pub struct ScanMetrics {
     pub num_rows: usize,
 }
 
-/// Target region to test.
-pub struct Target {
+/// Different bench target.
+pub enum Target {
+    /// Storage target.
+    Storage(StorageTarget),
+    /// Mito target.
+    Mito(MitoTarget),
+}
+
+impl Target {
+    /// Creates a new target.
+    pub async fn new(
+        path: &str,
+        engine_config: EngineConfig,
+        mito_config: MitoConfig,
+        region_id: RegionId,
+        run_mito: bool,
+    ) -> Target {
+        if run_mito {
+            Target::Mito(MitoTarget::new(path, mito_config, region_id).await)
+        } else {
+            Target::Storage(StorageTarget::new(path, engine_config, region_id).await)
+        }
+    }
+
+    /// Is the target a newly created region.
+    pub fn is_new_region(&self) -> bool {
+        match self {
+            Target::Storage(target) => target.is_new_region(),
+            Target::Mito(target) => target.is_new_region(),
+        }
+    }
+
+    /// Stop the target.
+    pub async fn shutdown(&self) {
+        match self {
+            Target::Storage(target) => target.shutdown().await,
+            Target::Mito(target) => target.shutdown().await,
+        }
+    }
+
+    /// Write [RecordBatch] to the target.
+    pub async fn write(&self, batch: RecordBatch) {
+        match self {
+            Target::Storage(target) => target.write(batch).await,
+            Target::Mito(target) => target.write(batch).await,
+        }
+    }
+
+    /// Scan all the data.
+    pub async fn full_scan(&self, batch_size: usize) -> ScanMetrics {
+        match self {
+            Target::Storage(target) => target.full_scan(batch_size).await,
+            Target::Mito(target) => target.full_scan(batch_size).await,
+        }
+    }
+}
+
+/// Target storage region to test.
+pub struct StorageTarget {
     region_id: RegionId,
     engine: EngineImpl<RaftEngineLogStore>,
     region: Mutex<Option<RegionImpl<RaftEngineLogStore>>>,
     is_new_region: bool,
 }
 
-impl Target {
-    /// Returns a new target.
-    pub async fn new(path: &str, config: EngineConfig, region_id: RegionId) -> Target {
+impl StorageTarget {
+    /// Returns a new storage target.
+    pub async fn new(path: &str, config: EngineConfig, region_id: RegionId) -> StorageTarget {
         let region_name = region_name_by_id(region_id);
         let engine = new_engine(path, config).await;
         let (region, is_new_region) = init_region(&engine, &region_name, region_id).await;
 
-        Target {
+        StorageTarget {
             region_id,
             engine,
             region: Mutex::new(Some(region)),
@@ -329,5 +543,72 @@ impl Target {
     /// Returns the region.
     fn region(&self) -> RegionImpl<RaftEngineLogStore> {
         self.region.lock().unwrap().clone().unwrap()
+    }
+}
+
+/// Target mito region to test.
+pub struct MitoTarget {
+    region_id: RegionId,
+    engine: MitoEngine,
+    is_new_region: bool,
+}
+
+impl MitoTarget {
+    /// Returns a new target.
+    pub async fn new(path: &str, config: MitoConfig, region_id: RegionId) -> MitoTarget {
+        let region_name = region_name_by_id(region_id);
+        let engine = new_mito_engine(path, config).await;
+        let is_new_region = init_mito_region(&engine, &region_name, region_id).await;
+
+        MitoTarget {
+            region_id,
+            engine,
+            is_new_region,
+        }
+    }
+
+    /// Is the target a newly created region.
+    pub fn is_new_region(&self) -> bool {
+        self.is_new_region
+    }
+
+    /// Stops the target.
+    pub async fn shutdown(&self) {
+        // Drops the region.
+        self.engine
+            .handle_request(self.region_id, RegionRequest::Close(RegionCloseRequest {}))
+            .await
+            .unwrap();
+        // Stops the engine.
+        self.engine.stop().await.unwrap();
+    }
+
+    /// Write [RecordBatch] to the target.
+    pub async fn write(&self, batch: RecordBatch) {
+        let request = record_batch_to_put_request(batch);
+        self.engine
+            .handle_request(self.region_id, RegionRequest::Put(request))
+            .await
+            .unwrap();
+    }
+
+    /// Scan all the data.
+    pub async fn full_scan(&self, _batch_size: usize) -> ScanMetrics {
+        let start = Instant::now();
+        let mut stream = self
+            .engine
+            .handle_query(self.region_id, ScanRequest::default())
+            .await
+            .unwrap();
+
+        let mut num_rows = 0;
+        while let Some(batch) = stream.try_next().await.unwrap() {
+            num_rows += batch.num_rows();
+        }
+
+        ScanMetrics {
+            total_cost: start.elapsed(),
+            num_rows,
+        }
     }
 }

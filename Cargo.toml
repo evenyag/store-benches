@@ -25,6 +25,7 @@ datatypes = { git = "https://github.com/evenyag/greptimedb.git", rev = "7673ad20
 futures-util = "0.3"
 humantime-serde = "1"
 log-store = { git = "https://github.com/evenyag/greptimedb.git", rev = "7673ad20a4297587f311fbd7a3c5f1bc3780e7d7" }
+mito2 = { git = "https://github.com/evenyag/greptimedb.git", rev = "7673ad20a4297587f311fbd7a3c5f1bc3780e7d7" }
 object-store = { git = "https://github.com/evenyag/greptimedb.git", rev = "7673ad20a4297587f311fbd7a3c5f1bc3780e7d7" }
 parquet = "43"
 serde = { version = "1", features = ["derive"] }

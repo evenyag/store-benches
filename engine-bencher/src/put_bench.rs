@@ -20,10 +20,12 @@ use common_telemetry::logging;
 use datatypes::arrow::record_batch::RecordBatchReader;
 use futures_util::future::join_all;
 use futures_util::StreamExt;
+use mito2::config::MitoConfig;
 use storage::config::EngineConfig;
+use store_api::storage::RegionId;
 
 use crate::loader::ParquetLoader;
-use crate::target::Target;
+use crate::target::{MitoTarget, StorageTarget, Target};
 
 /// Metrics during putting data.
 #[derive(Debug)]
@@ -41,17 +43,27 @@ pub struct PutBench {
     loader: ParquetLoader,
     path: String,
     engine_config: EngineConfig,
+    mito_config: MitoConfig,
     put_workers: usize,
+    run_mito: bool,
 }
 
 impl PutBench {
     /// Creates a new scan benchmark.
-    pub fn new(loader: ParquetLoader, path: String, engine_config: EngineConfig) -> PutBench {
+    pub fn new(
+        loader: ParquetLoader,
+        path: String,
+        engine_config: EngineConfig,
+        mito_config: MitoConfig,
+        run_mito: bool,
+    ) -> PutBench {
         PutBench {
             loader,
             path,
             engine_config,
+            mito_config,
             put_workers: 1,
+            run_mito,
         }
     }
 
@@ -153,6 +165,14 @@ impl PutBench {
         self.maybe_clean_data();
 
         // Use 1 as region id.
-        Target::new(&self.path, self.engine_config.clone(), 1.into()).await
+        let region_id = RegionId::from(1);
+        if self.run_mito {
+            let target = MitoTarget::new(&self.path, self.mito_config.clone(), region_id).await;
+            Target::Mito(target)
+        } else {
+            let target =
+                StorageTarget::new(&self.path, self.engine_config.clone(), region_id).await;
+            Target::Storage(target)
+        }
     }
 }

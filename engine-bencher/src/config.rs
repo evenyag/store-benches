@@ -18,6 +18,7 @@ use std::fs::File;
 use std::io::Read;
 use std::time::Duration;
 
+use mito2::config::MitoConfig;
 use serde::Deserialize;
 use storage::config::EngineConfig;
 use store_api::storage::RegionId;
@@ -73,6 +74,8 @@ pub struct ScanConfig {
     pub sample_size: Option<usize>,
     /// Storage data path.
     pub path: String,
+    /// Mito data path.
+    pub mito_path: String,
     /// Region to bench.
     pub region_id: RegionId,
     /// Batch size to load data.
@@ -87,6 +90,7 @@ impl Default for ScanConfig {
             measurement_time: None,
             sample_size: None,
             path: "/tmp/storage-bencher/".to_string(),
+            mito_path: "/tmp/storage-bencher/mito".to_string(),
             region_id: 0.into(),
             load_batch_size: 1024,
             scan_batch_size: 1024,
@@ -99,6 +103,11 @@ impl ScanConfig {
     pub fn engine_config(&self) -> EngineConfig {
         EngineConfig::default()
     }
+
+    /// Returns the mito config for bench.
+    pub fn mito_config(&self) -> MitoConfig {
+        MitoConfig::default()
+    }
 }
 
 /// Put bench config.
@@ -110,6 +119,8 @@ pub struct PutConfig {
     pub sample_size: Option<usize>,
     /// Storage data path.
     pub path: String,
+    /// Mito data path.
+    pub mito_path: String,
     /// Batch size to put.
     pub batch_size: usize,
     /// Put worker num.
@@ -122,6 +133,7 @@ impl Default for PutConfig {
             measurement_time: None,
             sample_size: None,
             path: "/tmp/storage-bencher/".to_string(),
+            mito_path: "/tmp/storage-bencher/mito".to_string(),
             batch_size: 1024,
             put_workers: 1,
         }
@@ -132,6 +144,11 @@ impl PutConfig {
     /// Returns the engine config for bench.
     pub fn engine_config(&self) -> EngineConfig {
         EngineConfig::default()
+    }
+
+    /// Returns the mito config for bench.
+    pub fn mito_config(&self) -> MitoConfig {
+        MitoConfig::default()
     }
 }
 
