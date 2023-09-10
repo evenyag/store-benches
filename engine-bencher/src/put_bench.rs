@@ -16,10 +16,9 @@ use std::fs;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use common_telemetry::logging;
-use datatypes::arrow::record_batch::RecordBatchReader;
+use common_telemetry::{info, logging};
+use datatypes::arrow::record_batch::{RecordBatch, RecordBatchReader};
 use futures_util::future::join_all;
-use futures_util::StreamExt;
 use mito2::config::MitoConfig;
 use storage::config::EngineConfig;
 use store_api::storage::RegionId;
@@ -88,21 +87,29 @@ impl PutBench {
             self.put_workers
         };
 
+        info!("worker num is {}", put_workers);
+
         // Spawn multiple tasks to put.
-        let (tx, rx) = flume::bounded(64);
+        let (tx, rx) = async_channel::bounded(64);
         let mut handles = Vec::with_capacity(self.put_workers);
-        for _ in 0..put_workers {
-            let rx = rx.clone();
+        for worker_id in 0..put_workers {
+            let rx: async_channel::Receiver<RecordBatch> = rx.clone();
             let target = target.clone();
             let handle = tokio::spawn(async move {
-                let mut stream = rx.into_stream();
                 let mut put_cost = Duration::ZERO;
+                let mut worker_rows = 0;
                 // Each worker receive batch from the channel.
-                while let Some(batch) = stream.next().await {
+                while let Ok(batch) = rx.recv().await {
                     let put_start = Instant::now();
+                    worker_rows += batch.num_rows();
                     target.write(batch).await;
                     put_cost += put_start.elapsed();
                 }
+
+                info!(
+                    "worker {} is finished, totol_rows: {}",
+                    worker_id, worker_rows
+                );
 
                 put_cost
             });
@@ -111,16 +118,16 @@ impl PutBench {
         }
 
         // Send batch to the channel.
-        let num_rows = tokio::task::block_in_place(|| {
-            let mut num_rows = 0;
-            for batch in reader {
-                let batch = batch.unwrap();
-                num_rows += batch.num_rows();
+        let mut num_rows = 0;
+        for batch in reader {
+            let batch = batch.unwrap();
+            num_rows += batch.num_rows();
 
-                tx.send(batch).unwrap();
-            }
-            num_rows
-        });
+            tx.send(batch).await.unwrap();
+        }
+        tx.close();
+
+        info!("reader finished, totol_rows: {}", num_rows);
 
         let put_cost = join_all(handles)
             .await
@@ -129,6 +136,8 @@ impl PutBench {
             .sum();
 
         let load_cost = run_start.elapsed();
+
+        info!("Run one put bench finished");
 
         target.shutdown().await;
 
