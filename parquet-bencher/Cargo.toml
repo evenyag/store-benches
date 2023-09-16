@@ -21,7 +21,7 @@ async-compat = "0.2"
 async-trait = "0.1"
 futures-util.workspace = true
 humantime-serde.workspace = true
-opendal = "0.30"
+opendal.workspace = true
 parquet = { workspace = true, features = ["async"] }
 tokio.workspace = true
 toml.workspace = true

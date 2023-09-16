@@ -1,7 +1,5 @@
 //! Bench parquet async.
 
-//! Parquet benchmark.
-
 use std::time::Instant;
 
 use arrow_array::RecordBatch;
