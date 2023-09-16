@@ -15,7 +15,7 @@
 use std::cell::Cell;
 use std::env;
 use std::fmt::Debug;
-use std::sync::{Mutex, Once};
+use std::sync::{Arc, Mutex, Once};
 use std::time::Duration;
 
 use common_base::readable_size::ReadableSize;
@@ -197,12 +197,28 @@ fn init_bench() -> BenchConfig {
     (*config).clone()
 }
 
-fn scan_storage_iter(b: &mut Bencher<'_>, input: &(BenchContext, ScanBench)) {
-    b.iter(|| {
-        let metrics = input.0.runtime.block_on(async { input.1.run().await });
+fn scan_storage_iter(b: &mut Bencher<'_>, ctx: &BenchContext, run_mito: bool) {
+    logging::info!("Prepare full scan bench, run_mito: {}", run_mito);
 
-        input.0.maybe_print_log(&metrics);
-    })
+    let scan_bench = ctx.runtime.block_on(async {
+        let mut scan_bench = ctx.new_scan_bench(run_mito).await;
+        scan_bench.maybe_prepare_data().await;
+
+        scan_bench
+    });
+
+    logging::info!("Start full scan bench, run_mito: {}", run_mito);
+
+    let input = Arc::new((ctx, scan_bench));
+    b.iter_batched(
+        || input.clone(),
+        |input| {
+            let metrics = input.0.runtime.block_on(async { input.1.run().await });
+
+            input.0.maybe_print_log(&metrics);
+        },
+        BatchSize::SmallInput,
+    );
 }
 
 fn bench_full_scan(c: &mut Criterion) {
@@ -219,25 +235,11 @@ fn bench_full_scan(c: &mut Criterion) {
 
     let parquet_path = config.scan.path.clone();
     let ctx = BenchContext::new(config);
-    let scan_bench = ctx.runtime.block_on(async {
-        let mut scan_bench = ctx.new_scan_bench(false).await;
-        scan_bench.maybe_prepare_data().await;
-
-        scan_bench
-    });
-
-    logging::info!("Start full scan bench");
-
-    let input = (ctx, scan_bench);
     group.bench_with_input(
         BenchmarkId::new("storage_scan", parquet_path),
-        &input,
-        |b, input| scan_storage_iter(b, input),
+        &ctx,
+        |b, input| scan_storage_iter(b, input, false),
     );
-
-    input.0.runtime.block_on(async {
-        input.1.shutdown().await;
-    });
 
     group.finish();
 }
@@ -256,25 +258,12 @@ fn bench_mito_full_scan(c: &mut Criterion) {
 
     let parquet_path = config.scan.path.clone();
     let ctx = BenchContext::new(config);
-    let scan_bench = ctx.runtime.block_on(async {
-        let mut scan_bench = ctx.new_scan_bench(true).await;
-        scan_bench.maybe_prepare_data().await;
 
-        scan_bench
-    });
-
-    logging::info!("Start mito full scan bench");
-
-    let input = (ctx, scan_bench);
     group.bench_with_input(
         BenchmarkId::new("mito_scan", parquet_path),
-        &input,
-        |b, input| scan_storage_iter(b, input),
+        &ctx,
+        |b, input| scan_storage_iter(b, input, true),
     );
-
-    input.0.runtime.block_on(async {
-        input.1.shutdown().await;
-    });
 
     group.finish();
 }
@@ -306,9 +295,11 @@ fn bench_put(c: &mut Criterion) {
     logging::info!("Start put bench");
 
     let input = (ctx, put_bench);
-    group.bench_with_input(BenchmarkId::new("storage_put", parquet_path), &input, |b, input| {
-        put_storage_iter(b, input)
-    });
+    group.bench_with_input(
+        BenchmarkId::new("storage_put", parquet_path),
+        &input,
+        |b, input| put_storage_iter(b, input),
+    );
 
     group.finish();
 }
@@ -332,14 +323,23 @@ fn bench_mito_put(c: &mut Criterion) {
     logging::info!("Start mito put bench");
 
     let input = (ctx, put_bench);
-    group.bench_with_input(BenchmarkId::new("mito_put", parquet_path), &input, |b, input| {
-        put_storage_iter(b, input)
-    });
+    group.bench_with_input(
+        BenchmarkId::new("mito_put", parquet_path),
+        &input,
+        |b, input| put_storage_iter(b, input),
+    );
 
     group.finish();
 }
 
-fn insert_btree_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
+fn insert_btree_iter(b: &mut Bencher<'_>, ctx: &BenchContext) {
+    logging::info!("Prepare insert btree memtable bench");
+
+    let insert_bench = ctx.new_insert_memtable_bench();
+
+    logging::info!("Start insert btree memtable bench");
+
+    let input = (ctx, insert_bench);
     b.iter(|| {
         let metrics = input.1.bench_btree();
 
@@ -347,7 +347,15 @@ fn insert_btree_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableB
     })
 }
 
-fn insert_btree_only_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
+fn insert_btree_only_iter(b: &mut Bencher<'_>, ctx: &BenchContext) {
+    logging::info!("Prepare insert btree memtable only bench");
+
+    let insert_bench = ctx.new_insert_memtable_bench();
+
+    logging::info!("Start insert btree memtable only bench");
+
+    let input = (ctx, insert_bench);
+
     b.iter_custom(|iters| {
         let mut insert_cost = Duration::ZERO;
         for _i in 0..iters {
@@ -397,19 +405,19 @@ fn bench_insert_btree_memtable(c: &mut Criterion) {
 
     let parquet_path = config.parquet_path.clone();
     let ctx = BenchContext::new(config);
-    let insert_bench = ctx.new_insert_memtable_bench();
+    // let insert_bench = ctx.new_insert_memtable_bench();
 
-    logging::info!("Start insert btree memtable bench");
+    // logging::info!("Start insert btree memtable bench");
 
-    let input = (ctx, insert_bench);
+    // let input = (ctx, insert_bench);
     group.bench_with_input(
         BenchmarkId::new("btree-insert", parquet_path.clone()),
-        &input,
+        &ctx,
         |b, input| insert_btree_iter(b, input),
     );
     group.bench_with_input(
         BenchmarkId::new("btree-insert-only", parquet_path.clone()),
-        &input,
+        &ctx,
         |b, input| insert_btree_only_iter(b, input),
     );
 
