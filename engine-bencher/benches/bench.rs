@@ -197,28 +197,15 @@ fn init_bench() -> BenchConfig {
     (*config).clone()
 }
 
-fn scan_storage_iter(b: &mut Bencher<'_>, ctx: &BenchContext, run_mito: bool) {
-    logging::info!("Prepare full scan bench, run_mito: {}", run_mito);
+fn scan_storage_iter(b: &mut Bencher<'_>, input: &(BenchContext, ScanBench)) {
+    b.iter(|| {
+        let metrics = input.0.runtime.block_on(async {
+            input.1.maybe_prepare_data().await;
+            input.1.run().await
+        });
 
-    let scan_bench = ctx.runtime.block_on(async {
-        let mut scan_bench = ctx.new_scan_bench(run_mito).await;
-        scan_bench.maybe_prepare_data().await;
-
-        scan_bench
+        input.0.maybe_print_log(&metrics);
     });
-
-    logging::info!("Start full scan bench, run_mito: {}", run_mito);
-
-    let input = Arc::new((ctx, scan_bench));
-    b.iter_batched(
-        || input.clone(),
-        |input| {
-            let metrics = input.0.runtime.block_on(async { input.1.run().await });
-
-            input.0.maybe_print_log(&metrics);
-        },
-        BatchSize::SmallInput,
-    );
 }
 
 fn bench_full_scan(c: &mut Criterion) {
@@ -235,10 +222,15 @@ fn bench_full_scan(c: &mut Criterion) {
 
     let parquet_path = config.scan.path.clone();
     let ctx = BenchContext::new(config);
+    let scan_bench = ctx
+        .runtime
+        .block_on(async { ctx.new_scan_bench(false).await });
+    let input = (ctx, scan_bench);
+
     group.bench_with_input(
         BenchmarkId::new("storage_scan", parquet_path),
-        &ctx,
-        |b, input| scan_storage_iter(b, input, false),
+        &input,
+        |b, input| scan_storage_iter(b, input),
     );
 
     group.finish();
@@ -258,11 +250,15 @@ fn bench_mito_full_scan(c: &mut Criterion) {
 
     let parquet_path = config.scan.path.clone();
     let ctx = BenchContext::new(config);
+    let scan_bench = ctx
+        .runtime
+        .block_on(async { ctx.new_scan_bench(true).await });
+    let input = (ctx, scan_bench);
 
     group.bench_with_input(
         BenchmarkId::new("mito_scan", parquet_path),
-        &ctx,
-        |b, input| scan_storage_iter(b, input, true),
+        &input,
+        |b, input| scan_storage_iter(b, input),
     );
 
     group.finish();
