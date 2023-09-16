@@ -11,6 +11,7 @@ common-base.workspace = true
 common-config.workspace = true
 common-runtime.workspace = true
 common-telemetry.workspace = true
+common-time.workspace = true
 datatypes.workspace = true
 async-channel = "1"
 futures-util.workspace = true

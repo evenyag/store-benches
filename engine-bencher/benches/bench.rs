@@ -29,6 +29,7 @@ use engine_bencher::memtable::insert_bench::InsertMemtableBench;
 use engine_bencher::memtable::scan_bench::ScanMemtableBench;
 use engine_bencher::put_bench::PutBench;
 use engine_bencher::scan_bench::ScanBench;
+use engine_bencher::sst_reader_bench::ParquetReaderBench;
 use engine_bencher::target::Target;
 use memtable_nursery::columnar::ColumnarConfig;
 use memtable_nursery::plain_vector::PlainVectorConfig;
@@ -158,6 +159,13 @@ impl BenchContext {
 
         bench
     }
+
+    fn new_sst_reader_bench(&self) -> Option<ParquetReaderBench> {
+        self.config
+            .sst_reader
+            .file_id
+            .map(|file_id| ParquetReaderBench::new(&self.config.sst_reader.file_dir, file_id))
+    }
 }
 
 fn init_bench() -> BenchConfig {
@@ -222,7 +230,7 @@ fn bench_full_scan(c: &mut Criterion) {
 
     let input = (ctx, scan_bench);
     group.bench_with_input(
-        BenchmarkId::new("scan", parquet_path),
+        BenchmarkId::new("storage_scan", parquet_path),
         &input,
         |b, input| scan_storage_iter(b, input),
     );
@@ -259,7 +267,7 @@ fn bench_mito_full_scan(c: &mut Criterion) {
 
     let input = (ctx, scan_bench);
     group.bench_with_input(
-        BenchmarkId::new("scan", parquet_path),
+        BenchmarkId::new("mito_scan", parquet_path),
         &input,
         |b, input| scan_storage_iter(b, input),
     );
@@ -298,7 +306,7 @@ fn bench_put(c: &mut Criterion) {
     logging::info!("Start put bench");
 
     let input = (ctx, put_bench);
-    group.bench_with_input(BenchmarkId::new("put", parquet_path), &input, |b, input| {
+    group.bench_with_input(BenchmarkId::new("storage_put", parquet_path), &input, |b, input| {
         put_storage_iter(b, input)
     });
 
@@ -324,7 +332,7 @@ fn bench_mito_put(c: &mut Criterion) {
     logging::info!("Start mito put bench");
 
     let input = (ctx, put_bench);
-    group.bench_with_input(BenchmarkId::new("put", parquet_path), &input, |b, input| {
+    group.bench_with_input(BenchmarkId::new("mito_put", parquet_path), &input, |b, input| {
         put_storage_iter(b, input)
     });
 
@@ -395,7 +403,7 @@ fn bench_insert_btree_memtable(c: &mut Criterion) {
 
     let input = (ctx, insert_bench);
     group.bench_with_input(
-        BenchmarkId::new("btree", parquet_path.clone()),
+        BenchmarkId::new("btree-insert", parquet_path.clone()),
         &input,
         |b, input| insert_btree_iter(b, input),
     );
@@ -429,7 +437,7 @@ fn bench_insert_columnar_memtable(c: &mut Criterion) {
     let input = (ctx, insert_bench);
     // columnar
     group.bench_with_input(
-        BenchmarkId::new("columnar", parquet_path.clone()),
+        BenchmarkId::new("columnar-insert", parquet_path.clone()),
         &input,
         |b, input| insert_columnar_iter(b, input),
     );
@@ -478,7 +486,7 @@ fn bench_insert_series_memtable(c: &mut Criterion) {
     let input = (ctx, insert_bench);
     // series
     group.bench_with_input(
-        BenchmarkId::new("series", parquet_path.clone()),
+        BenchmarkId::new("series-insert", parquet_path.clone()),
         &input,
         |b, input| insert_series_iter(b, input),
     );
@@ -507,7 +515,7 @@ fn bench_insert_plain_vector_memtable(c: &mut Criterion) {
     let input = (ctx, insert_bench);
     // series
     group.bench_with_input(
-        BenchmarkId::new("plain_vector", parquet_path.clone()),
+        BenchmarkId::new("plain_vector-insert", parquet_path.clone()),
         &input,
         |b, input| insert_vector_iter(b, input),
     );
@@ -544,7 +552,7 @@ fn bench_scan_btree_memtable(c: &mut Criterion) {
     let mut input = (ctx, scan_bench);
     input.1.init_btree();
     group.bench_with_input(
-        BenchmarkId::new("btree", parquet_path.clone()),
+        BenchmarkId::new("btree-scan", parquet_path.clone()),
         &input,
         |b, input| scan_memtable_iter(b, input),
     );
@@ -573,14 +581,14 @@ fn bench_scan_columnar_memtable(c: &mut Criterion) {
     let mut input = (ctx, scan_bench);
     input.1.init_columnar(ColumnarConfig { use_dict: false });
     group.bench_with_input(
-        BenchmarkId::new("columnar", parquet_path.clone()),
+        BenchmarkId::new("columnar-scan", parquet_path.clone()),
         &input,
         |b, input| scan_memtable_iter(b, input),
     );
 
     input.1.init_columnar(ColumnarConfig { use_dict: true });
     group.bench_with_input(
-        BenchmarkId::new("columnar-dict", parquet_path),
+        BenchmarkId::new("columnar-dict-scan", parquet_path),
         &input,
         |b, input| scan_memtable_iter(b, input),
     );
@@ -609,7 +617,7 @@ fn bench_scan_series_memtable(c: &mut Criterion) {
     let mut input = (ctx, scan_bench);
     input.1.init_series(SeriesConfig::default());
     group.bench_with_input(
-        BenchmarkId::new("series", parquet_path.clone()),
+        BenchmarkId::new("series-scan", parquet_path.clone()),
         &input,
         |b, input| scan_memtable_iter(b, input),
     );
@@ -638,9 +646,48 @@ fn bench_scan_plain_vector_memtable(c: &mut Criterion) {
     let mut input = (ctx, scan_bench);
     input.1.init_plain_vector(PlainVectorConfig::default());
     group.bench_with_input(
-        BenchmarkId::new("plain_vector", parquet_path.clone()),
+        BenchmarkId::new("plain_vector-scan", parquet_path.clone()),
         &input,
         |b, input| scan_memtable_iter(b, input),
+    );
+
+    group.finish();
+}
+
+fn sst_reader_iter(b: &mut Bencher<'_>, input: &(BenchContext, ParquetReaderBench)) {
+    b.iter(|| {
+        let metrics = input.0.runtime.block_on(async { input.1.bench().await });
+
+        input.0.maybe_print_log(&metrics);
+    })
+}
+
+fn bench_sst_reader(c: &mut Criterion) {
+    let config = init_bench();
+
+    let Some(file_id) = config.sst_reader.file_id else {
+        return;
+    };
+
+    let mut group = c.benchmark_group("sst_reader");
+
+    if let Some(v) = config.scan_memtable.measurement_time {
+        group.measurement_time(v);
+    }
+    if let Some(v) = config.scan_memtable.sample_size {
+        group.sample_size(v);
+    }
+
+    let ctx = BenchContext::new(config);
+    let reader_bench = ctx.new_sst_reader_bench().unwrap();
+
+    logging::info!("Start parquet sst reader bench");
+
+    let input = (ctx, reader_bench);
+    group.bench_with_input(
+        BenchmarkId::new("parquet_reader", file_id),
+        &input,
+        |b, input| sst_reader_iter(b, input),
     );
 
     group.finish();
@@ -661,6 +708,7 @@ criterion_group!(
               bench_scan_columnar_memtable,
               bench_insert_series_memtable,
               bench_scan_series_memtable,
+              bench_sst_reader,
 );
 
 criterion_main!(benches);

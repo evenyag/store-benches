@@ -19,6 +19,7 @@ use std::io::Read;
 use std::time::Duration;
 
 use mito2::config::MitoConfig;
+use mito2::sst::file::FileId;
 use serde::Deserialize;
 use storage::config::EngineConfig;
 use store_api::storage::RegionId;
@@ -37,8 +38,10 @@ pub struct BenchConfig {
     pub put: PutConfig,
     /// Config for insert memtable bench.
     pub insert_memtable: InsertMemtableConfig,
-    /// Config for insert memtable bench.
+    /// Config for scan memtable bench.
     pub scan_memtable: ScanMemtableConfig,
+    /// Config for SST reader bench.
+    pub sst_reader: SstReaderConfig,
 }
 
 impl Default for BenchConfig {
@@ -51,6 +54,7 @@ impl Default for BenchConfig {
             put: PutConfig::default(),
             insert_memtable: InsertMemtableConfig::default(),
             scan_memtable: ScanMemtableConfig::default(),
+            sst_reader: SstReaderConfig::default(),
         }
     }
 }
@@ -199,6 +203,30 @@ impl Default for ScanMemtableConfig {
             total_rows: 500000,
             load_batch_size: 1000,
             scan_batch_size: 1000,
+        }
+    }
+}
+
+/// SST reader bench config.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct SstReaderConfig {
+    #[serde(with = "humantime_serde")]
+    pub measurement_time: Option<Duration>,
+    pub sample_size: Option<usize>,
+    /// Directory of the SST.
+    pub file_dir: String,
+    /// Id of the file.
+    pub file_id: Option<FileId>,
+}
+
+impl Default for SstReaderConfig {
+    fn default() -> Self {
+        SstReaderConfig {
+            measurement_time: None,
+            sample_size: None,
+            file_dir: "/tmp/storage-bencher/mito".to_string(),
+            file_id: None,
         }
     }
 }
