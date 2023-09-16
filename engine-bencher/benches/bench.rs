@@ -332,14 +332,7 @@ fn bench_mito_put(c: &mut Criterion) {
     group.finish();
 }
 
-fn insert_btree_iter(b: &mut Bencher<'_>, ctx: &BenchContext) {
-    logging::info!("Prepare insert btree memtable bench");
-
-    let insert_bench = ctx.new_insert_memtable_bench();
-
-    logging::info!("Start insert btree memtable bench");
-
-    let input = (ctx, insert_bench);
+fn insert_btree_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
     b.iter(|| {
         let metrics = input.1.bench_btree();
 
@@ -347,15 +340,7 @@ fn insert_btree_iter(b: &mut Bencher<'_>, ctx: &BenchContext) {
     })
 }
 
-fn insert_btree_only_iter(b: &mut Bencher<'_>, ctx: &BenchContext) {
-    logging::info!("Prepare insert btree memtable only bench");
-
-    let insert_bench = ctx.new_insert_memtable_bench();
-
-    logging::info!("Start insert btree memtable only bench");
-
-    let input = (ctx, insert_bench);
-
+fn insert_btree_only_iter(b: &mut Bencher<'_>, input: &(BenchContext, InsertMemtableBench)) {
     b.iter_custom(|iters| {
         let mut insert_cost = Duration::ZERO;
         for _i in 0..iters {
@@ -405,19 +390,19 @@ fn bench_insert_btree_memtable(c: &mut Criterion) {
 
     let parquet_path = config.parquet_path.clone();
     let ctx = BenchContext::new(config);
-    // let insert_bench = ctx.new_insert_memtable_bench();
+    let insert_bench = ctx.new_insert_memtable_bench();
 
-    // logging::info!("Start insert btree memtable bench");
+    logging::info!("Start insert btree memtable bench");
 
-    // let input = (ctx, insert_bench);
+    let input = (ctx, insert_bench);
     group.bench_with_input(
         BenchmarkId::new("btree-insert", parquet_path.clone()),
-        &ctx,
+        &input,
         |b, input| insert_btree_iter(b, input),
     );
     group.bench_with_input(
         BenchmarkId::new("btree-insert-only", parquet_path.clone()),
-        &ctx,
+        &input,
         |b, input| insert_btree_only_iter(b, input),
     );
 
