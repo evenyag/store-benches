@@ -16,20 +16,25 @@ resolver = "2"
 arrow-array = "43"
 arrow-row = "43"
 arrow-schema = "43"
-api = { git = "https://github.com/evenyag/greptimedb.git", rev = "92640b5d09f82efb69b614440202c725f780ee40" }
-common-base = { git = "https://github.com/evenyag/greptimedb.git", rev = "92640b5d09f82efb69b614440202c725f780ee40" }
-common-config = { git = "https://github.com/evenyag/greptimedb.git", rev = "92640b5d09f82efb69b614440202c725f780ee40" }
-common-runtime = { git = "https://github.com/evenyag/greptimedb.git", rev = "92640b5d09f82efb69b614440202c725f780ee40" }
-common-telemetry = { git = "https://github.com/evenyag/greptimedb.git", rev = "92640b5d09f82efb69b614440202c725f780ee40" }
-datatypes = { git = "https://github.com/evenyag/greptimedb.git", rev = "92640b5d09f82efb69b614440202c725f780ee40" }
+api = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/api" }
+common-base = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/common/base" }
+common-config = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/common/config" }
+common-runtime = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/common/runtime" }
+common-telemetry = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/common/telemetry" }
+common-time = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/common/time" }
+datatypes = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/datatypes" }
 futures-util = "0.3"
 humantime-serde = "1"
-log-store = { git = "https://github.com/evenyag/greptimedb.git", rev = "92640b5d09f82efb69b614440202c725f780ee40" }
-mito2 = { git = "https://github.com/evenyag/greptimedb.git", rev = "92640b5d09f82efb69b614440202c725f780ee40" }
-object-store = { git = "https://github.com/evenyag/greptimedb.git", rev = "92640b5d09f82efb69b614440202c725f780ee40" }
+log-store = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/log-store" }
+mito2 = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/mito2" }
+object-store = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/object-store" }
+opendal = { git = "https://github.com/apache/incubator-opendal.git", rev = "7d5524f35f29f7eda8131e8b0873590b7cbe34ab", features = [
+    "layers-tracing",
+    "layers-metrics",
+] }
 parquet = "43"
 serde = { version = "1", features = ["derive"] }
-storage = { git = "https://github.com/evenyag/greptimedb.git", rev = "92640b5d09f82efb69b614440202c725f780ee40" }
-store-api = { git = "https://github.com/evenyag/greptimedb.git", rev = "92640b5d09f82efb69b614440202c725f780ee40" }
+storage = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/storage" }
+store-api = { path = "/Users/evenyag/codes/greptime/bench-mito2/src/store-api" }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 toml = "0.7"
