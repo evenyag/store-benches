@@ -15,7 +15,7 @@
 use std::cell::Cell;
 use std::env;
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex, Once};
+use std::sync::{Mutex, Once};
 use std::time::Duration;
 
 use common_base::readable_size::ReadableSize;
