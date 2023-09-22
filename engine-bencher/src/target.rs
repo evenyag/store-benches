@@ -22,7 +22,7 @@ use api::helper::ColumnDataTypeWrapper;
 use api::v1::{Row, Rows, SemanticType};
 use common_base::readable_size::ReadableSize;
 use common_config::WalConfig;
-use common_telemetry::logging;
+use common_telemetry::{logging, warn};
 use datatypes::arrow::compute::cast;
 use datatypes::arrow::datatypes::{DataType, TimeUnit};
 use datatypes::arrow::record_batch::RecordBatch;
@@ -399,9 +399,7 @@ fn record_batch_to_put_request(batch: RecordBatch) -> RegionPutRequest {
         }
         rows.push(Row { values });
     }
-    RegionPutRequest {
-        rows: Rows { schema, rows },
-    }
+    RegionPutRequest::new(Rows { schema, rows })
 }
 
 /// Metrics of scanning a region.
@@ -585,11 +583,17 @@ impl MitoTarget {
 
     /// Write [RecordBatch] to the target.
     pub async fn write(&self, batch: RecordBatch) {
+        let start = Instant::now();
         let request = record_batch_to_put_request(batch);
+        let req_id = request.req_id;
         self.engine
             .handle_request(self.region_id, RegionRequest::Put(request))
             .await
             .unwrap();
+        let cost = start.elapsed();
+        if cost > Duration::from_millis(200) {
+            warn!("request {} put cost is too larger {:?} > 200ms", req_id, cost);
+        }
     }
 
     /// Scan all the data.

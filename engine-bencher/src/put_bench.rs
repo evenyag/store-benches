@@ -16,12 +16,13 @@ use std::fs;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use common_telemetry::{info, logging};
+use common_telemetry::{info, logging, warn};
 use datatypes::arrow::record_batch::{RecordBatch, RecordBatchReader};
 use futures_util::future::join_all;
 use mito2::config::MitoConfig;
 use storage::config::EngineConfig;
 use store_api::storage::RegionId;
+use tokio::task::spawn_blocking;
 
 use crate::loader::ParquetLoader;
 use crate::target::{MitoTarget, StorageTarget, Target};
@@ -99,16 +100,22 @@ impl PutBench {
                 let mut put_cost = Duration::ZERO;
                 let mut worker_rows = 0;
                 // Each worker receive batch from the channel.
+                let mut batch_id = 0;
                 while let Ok(batch) = rx.recv().await {
                     let put_start = Instant::now();
                     worker_rows += batch.num_rows();
                     target.write(batch).await;
-                    put_cost += put_start.elapsed();
+                    let put_elapsed = put_start.elapsed();
+                    put_cost += put_elapsed;
+                    if put_elapsed > Duration::from_secs(1) {
+                        warn!("worker {} put batch {} cost {:?} > 1s", worker_id, batch_id, put_elapsed);
+                    }
+                    batch_id += 1;
                 }
 
                 info!(
-                    "worker {} is finished, totol_rows: {}",
-                    worker_id, worker_rows
+                    "worker {} is finished, totol_rows: {}, put_cost: {:?}",
+                    worker_id, worker_rows, put_cost,
                 );
 
                 put_cost
@@ -118,14 +125,18 @@ impl PutBench {
         }
 
         // Send batch to the channel.
-        let mut num_rows = 0;
-        for batch in reader {
-            let batch = batch.unwrap();
-            num_rows += batch.num_rows();
+        let h = spawn_blocking(move || {
+            let mut num_rows = 0;
+            for batch in reader {
+                let batch = batch.unwrap();
+                num_rows += batch.num_rows();
 
-            tx.send(batch).await.unwrap();
-        }
-        tx.close();
+                tx.send_blocking(batch).unwrap();
+            }
+            tx.close();
+            num_rows
+        });
+        let num_rows = h.await.unwrap();
 
         info!("reader finished, totol_rows: {}", num_rows);
 
