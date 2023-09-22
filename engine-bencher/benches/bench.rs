@@ -111,6 +111,7 @@ impl BenchContext {
             self.config.put.mito_config(),
             run_mito,
         )
+        .with_put_workers(self.config.put.put_workers)
     }
 
     fn new_insert_memtable_bench(&self) -> InsertMemtableBench {
