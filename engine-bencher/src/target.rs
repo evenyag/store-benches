@@ -592,7 +592,10 @@ impl MitoTarget {
             .unwrap();
         let cost = start.elapsed();
         if cost > Duration::from_millis(200) {
-            warn!("request {} put cost is too larger {:?} > 200ms", req_id, cost);
+            warn!(
+                "request {} put cost is too larger {:?} > 200ms",
+                req_id, cost
+            );
         }
     }
 

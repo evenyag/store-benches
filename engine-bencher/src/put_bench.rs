@@ -108,7 +108,10 @@ impl PutBench {
                     let put_elapsed = put_start.elapsed();
                     put_cost += put_elapsed;
                     if put_elapsed > Duration::from_secs(1) {
-                        warn!("worker {} put batch {} cost {:?} > 1s", worker_id, batch_id, put_elapsed);
+                        warn!(
+                            "worker {} put batch {} cost {:?} > 1s",
+                            worker_id, batch_id, put_elapsed
+                        );
                     }
                     batch_id += 1;
                 }
