@@ -223,7 +223,6 @@ fn new_cpu_create_request(region_name: &str) -> RegionCreateRequest {
         engine: "".to_string(),
         column_metadatas,
         primary_key,
-        create_if_not_exists: false,
         options: HashMap::new(),
         region_dir: region_name.to_string(),
     }
