@@ -37,7 +37,8 @@ pub struct BenchConfig {
     pub measurement_time: Option<Duration>,
     pub sample_size: Option<usize>,
     pub scan_batch_size: usize,
-    pub print_metrics: bool,
+    /// Print metrics after N iterations. 0 to disable metrics.
+    pub print_metrics_every: usize,
     /// Index of columns to read, empty for all columns.
     pub columns: Vec<usize>,
     /// Index of row groups to read, empty for all row groups.
@@ -53,7 +54,7 @@ impl Default for BenchConfig {
             measurement_time: None,
             sample_size: None,
             scan_batch_size: 1024,
-            print_metrics: false,
+            print_metrics_every: 0,
             columns: Vec::new(),
             row_groups: Vec::new(),
             selection: None,

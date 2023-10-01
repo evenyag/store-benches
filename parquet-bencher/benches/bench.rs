@@ -1,3 +1,5 @@
+use std::cell::Cell;
+use std::fmt::Debug;
 use std::sync::Arc;
 
 use criterion::*;
@@ -12,13 +14,58 @@ const BENCH_CONFIG_KEY: &str = "BENCH_CONFIG";
 
 #[derive(Debug, Clone)]
 struct BenchContext {
-    print_metrics: bool,
+    print_metrics_every: usize,
+    times: Cell<usize>,
+}
+
+impl BenchContext {
+    fn new(print_metrics_every: usize) -> Self {
+        Self {
+            print_metrics_every,
+            times: Cell::new(0),
+        }
+    }
+
+    fn maybe_print_metrics<T: Debug>(&self, metrics: &T) {
+        let mut times = self.times.take();
+        times += 1;
+        self.times.set(times);
+
+        if self.print_metrics_every > 0 {
+            if times % self.print_metrics_every == 0 {
+                println!("Metrics at times {} is: {:?}", times, metrics);
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
 struct AsyncBenchContext {
     runtime: Arc<Runtime>,
-    print_metrics: bool,
+    print_metrics_every: usize,
+    times: Cell<usize>,
+}
+
+impl AsyncBenchContext {
+    fn new(runtime: Arc<Runtime>, print_metrics_every: usize) -> Self {
+        Self {
+            runtime,
+            print_metrics_every,
+            times: Cell::new(0),
+        }
+    }
+
+    fn maybe_print_metrics<T: Debug>(&self, metrics: &T) {
+        let mut times = self.times.take();
+        times += 1;
+        self.times.set(times);
+
+        if self.print_metrics_every > 0 {
+            if times % self.print_metrics_every == 0 {
+                println!("Metrics at times {} is: {:?}", times, metrics);
+            }
+        }
+    }
 }
 
 fn init_bench() -> BenchConfig {
@@ -30,9 +77,7 @@ fn init_bench() -> BenchConfig {
 fn bench_parquet_iter(b: &mut Bencher<'_>, bench: &(ParquetBench, BenchContext)) {
     b.iter(|| {
         let metrics = bench.0.run();
-        if bench.1.print_metrics {
-            println!("metrics is {:?}", metrics);
-        }
+        bench.1.maybe_print_metrics(&metrics);
     })
 }
 
@@ -54,9 +99,7 @@ fn bench_parquet(c: &mut Criterion) {
         group.sample_size(value);
     }
 
-    let ctx = BenchContext {
-        print_metrics: config.print_metrics,
-    };
+    let ctx = BenchContext::new(config.print_metrics_every);
     let parquet_name = bench_file_name(&config.parquet_path);
     let bench = ParquetBench::new(config.parquet_path.clone(), config.scan_batch_size)
         .with_columns(config.columns.clone());
@@ -107,9 +150,7 @@ fn bench_parquet(c: &mut Criterion) {
 fn bench_parquet_async_iter(b: &mut Bencher<'_>, bench: &(ParquetAsyncBench, AsyncBenchContext)) {
     b.iter(|| {
         let metrics = bench.1.runtime.block_on(async { bench.0.run().await });
-        if bench.1.print_metrics {
-            println!("metrics is {:?}", metrics);
-        }
+        bench.1.maybe_print_metrics(&metrics);
     })
 }
 
@@ -132,10 +173,7 @@ fn bench_parquet_async(c: &mut Criterion) {
     let operator = Operator::new(builder).unwrap().finish();
 
     let runtime = Arc::new(Runtime::new().unwrap());
-    let ctx = AsyncBenchContext {
-        runtime,
-        print_metrics: config.print_metrics,
-    };
+    let ctx = AsyncBenchContext::new(runtime, config.print_metrics_every);
     let parquet_name = bench_file_name(&config.parquet_path);
     let bench = ParquetAsyncBench::new(
         operator.clone(),
