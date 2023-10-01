@@ -65,17 +65,20 @@ fn bench_parquet(c: &mut Criterion) {
         &(bench, ctx.clone()),
         bench_parquet_iter,
     );
-    let bench = ParquetBench::new(config.parquet_path.clone(), config.scan_batch_size)
-        .with_columns(config.columns.clone())
-        .with_row_groups(config.row_groups.clone());
-    group.bench_with_input(
-        BenchmarkId::new(
-            "scan_row_groups",
-            format!("{}/{:?}", parquet_name, config.row_groups),
-        ),
-        &(bench, ctx),
-        bench_parquet_iter,
-    );
+
+    if !config.row_groups.is_empty() {
+        let bench = ParquetBench::new(config.parquet_path.clone(), config.scan_batch_size)
+            .with_columns(config.columns.clone())
+            .with_row_groups(config.row_groups.clone());
+        group.bench_with_input(
+            BenchmarkId::new(
+                "scan_row_groups",
+                format!("{}/{:?}", parquet_name, config.row_groups),
+            ),
+            &(bench, ctx),
+            bench_parquet_iter,
+        );
+    }
 
     group.finish();
 }
@@ -138,21 +141,23 @@ fn bench_parquet_async(c: &mut Criterion) {
         bench_parquet_async_iter,
     );
 
-    let bench = ParquetAsyncBench::new(
-        operator.clone(),
-        config.parquet_path.clone(),
-        config.scan_batch_size,
-    )
-    .with_columns(config.columns.clone())
-    .with_row_groups(config.row_groups.clone());
-    group.bench_with_input(
-        BenchmarkId::new(
-            "scan_row_group_async",
-            format!("{}/{:?}", parquet_name, config.row_groups),
-        ),
-        &(bench, ctx.clone()),
-        bench_parquet_async_iter,
-    );
+    if !config.row_groups.is_empty() {
+        let bench = ParquetAsyncBench::new(
+            operator.clone(),
+            config.parquet_path.clone(),
+            config.scan_batch_size,
+        )
+        .with_columns(config.columns.clone())
+        .with_row_groups(config.row_groups.clone());
+        group.bench_with_input(
+            BenchmarkId::new(
+                "scan_row_group_async",
+                format!("{}/{:?}", parquet_name, config.row_groups),
+            ),
+            &(bench, ctx.clone()),
+            bench_parquet_async_iter,
+        );
+    }
 
     group.finish();
 }
