@@ -4,7 +4,30 @@ use std::fs::File;
 use std::io::Read;
 use std::time::Duration;
 
+use parquet::arrow::arrow_reader::{RowSelection, RowSelector};
 use serde::Deserialize;
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct RowSelectionConfig {
+    row_counts: Vec<usize>,
+    skips: Vec<bool>,
+}
+
+impl RowSelectionConfig {
+    pub fn to_selection(&self) -> RowSelection {
+        let selectors: Vec<_> = self
+            .row_counts
+            .iter()
+            .zip(&self.skips)
+            .map(|(count, skip)| RowSelector {
+                row_count: *count,
+                skip: *skip,
+            })
+            .collect();
+        RowSelection::from(selectors)
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
@@ -19,6 +42,8 @@ pub struct BenchConfig {
     pub columns: Vec<usize>,
     /// Index of row groups to read, empty for all row groups.
     pub row_groups: Vec<usize>,
+    /// Row selections.
+    pub selection: Option<RowSelectionConfig>,
 }
 
 impl Default for BenchConfig {
@@ -31,6 +56,7 @@ impl Default for BenchConfig {
             print_metrics: false,
             columns: Vec::new(),
             row_groups: Vec::new(),
+            selection: None,
         }
     }
 }

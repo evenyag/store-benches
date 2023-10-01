@@ -75,6 +75,27 @@ fn bench_parquet(c: &mut Criterion) {
                 "scan_row_groups",
                 format!("{}/{:?}", parquet_name, config.row_groups),
             ),
+            &(bench, ctx.clone()),
+            bench_parquet_iter,
+        );
+    }
+
+    if let Some(selection) = &config.selection {
+        let selection = selection.to_selection();
+        let bench = ParquetBench::new(config.parquet_path.clone(), config.scan_batch_size)
+            .with_columns(config.columns.clone())
+            .with_row_groups(config.row_groups.clone())
+            .with_selection(selection.clone());
+        group.bench_with_input(
+            BenchmarkId::new(
+                "scan_row_selection",
+                format!(
+                    "{}/{:?}/{}",
+                    parquet_name,
+                    config.row_groups,
+                    selection.row_count()
+                ),
+            ),
             &(bench, ctx),
             bench_parquet_iter,
         );
@@ -152,9 +173,34 @@ fn bench_parquet_async(c: &mut Criterion) {
         group.bench_with_input(
             BenchmarkId::new(
                 "scan_row_group_async",
-                format!("{}/{:?}", parquet_name, config.row_groups),
+                format!("{}/{:?}", parquet_name.clone(), config.row_groups),
             ),
             &(bench, ctx.clone()),
+            bench_parquet_async_iter,
+        );
+    }
+
+    if let Some(selection) = &config.selection {
+        let selection = selection.to_selection();
+        let bench = ParquetAsyncBench::new(
+            operator.clone(),
+            config.parquet_path.clone(),
+            config.scan_batch_size,
+        )
+        .with_columns(config.columns.clone())
+        .with_row_groups(config.row_groups.clone())
+        .with_selection(selection.clone());
+        group.bench_with_input(
+            BenchmarkId::new(
+                "scan_row_selection_async",
+                format!(
+                    "{}/{:?}/{}",
+                    parquet_name,
+                    config.row_groups,
+                    selection.row_count()
+                ),
+            ),
+            &(bench, ctx),
             bench_parquet_async_iter,
         );
     }

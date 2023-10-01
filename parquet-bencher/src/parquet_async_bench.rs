@@ -7,6 +7,7 @@ use async_compat::CompatExt;
 use futures_util::stream::BoxStream;
 use futures_util::TryStreamExt;
 use opendal::Operator;
+use parquet::arrow::arrow_reader::RowSelection;
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use parquet::errors::ParquetError;
 use tokio::io::BufReader;
@@ -20,6 +21,7 @@ pub struct ParquetAsyncBench {
     columns: Vec<usize>,
     use_async_trait: bool,
     row_groups: Vec<usize>,
+    selection: Option<RowSelection>,
 }
 
 impl ParquetAsyncBench {
@@ -31,6 +33,7 @@ impl ParquetAsyncBench {
             columns: Vec::new(),
             use_async_trait: false,
             row_groups: Vec::new(),
+            selection: None,
         }
     }
 
@@ -46,6 +49,11 @@ impl ParquetAsyncBench {
 
     pub fn with_row_groups(mut self, row_groups: Vec<usize>) -> Self {
         self.row_groups = row_groups;
+        self
+    }
+
+    pub fn with_selection(mut self, selection: RowSelection) -> Self {
+        self.selection = Some(selection);
         self
     }
 
@@ -79,6 +87,9 @@ impl ParquetAsyncBench {
         if !self.row_groups.is_empty() {
             num_row_groups = self.row_groups.len();
             builder = builder.with_row_groups(self.row_groups.clone());
+        }
+        if let Some(selection) = &self.selection {
+            builder = builder.with_row_selection(selection.clone());
         }
 
         let mut stream = builder.build().unwrap();
