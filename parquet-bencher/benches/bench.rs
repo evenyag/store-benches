@@ -10,6 +10,7 @@ use tokio::runtime::Runtime;
 
 const BENCH_CONFIG_KEY: &str = "BENCH_CONFIG";
 
+#[derive(Debug, Clone)]
 struct BenchContext {
     print_metrics: bool,
 }
@@ -35,6 +36,10 @@ fn bench_parquet_iter(b: &mut Bencher<'_>, bench: &(ParquetBench, BenchContext))
     })
 }
 
+fn bench_file_name(path: &str) -> String {
+    path.split('/').last().unwrap_or(path).to_string()
+}
+
 fn bench_parquet(c: &mut Criterion) {
     let config = init_bench();
 
@@ -42,16 +47,32 @@ fn bench_parquet(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("scan_parquet");
 
-    group.measurement_time(config.measurement_time);
-    group.sample_size(config.sample_size);
+    if let Some(value) = config.measurement_time {
+        group.measurement_time(value);
+    }
+    if let Some(value) = config.sample_size {
+        group.sample_size(value);
+    }
 
-    let bench = ParquetBench::new(config.parquet_path.clone(), config.scan_batch_size)
-        .with_columns(config.columns.clone());
     let ctx = BenchContext {
         print_metrics: config.print_metrics,
     };
+    let parquet_name = bench_file_name(&config.parquet_path);
+    let bench = ParquetBench::new(config.parquet_path.clone(), config.scan_batch_size)
+        .with_columns(config.columns.clone());
     group.bench_with_input(
-        BenchmarkId::new("scan", config.parquet_path),
+        BenchmarkId::new("scan_cols", parquet_name.clone()),
+        &(bench, ctx.clone()),
+        bench_parquet_iter,
+    );
+    let bench = ParquetBench::new(config.parquet_path.clone(), config.scan_batch_size)
+        .with_columns(config.columns.clone())
+        .with_row_groups(config.row_groups.clone());
+    group.bench_with_input(
+        BenchmarkId::new(
+            "scan_row_groups",
+            format!("{}/{:?}", parquet_name, config.row_groups),
+        ),
         &(bench, ctx),
         bench_parquet_iter,
     );
@@ -75,8 +96,12 @@ fn bench_parquet_async(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("scan_parquet_async");
 
-    group.measurement_time(config.measurement_time);
-    group.sample_size(config.sample_size);
+    if let Some(value) = config.measurement_time {
+        group.measurement_time(value);
+    }
+    if let Some(value) = config.sample_size {
+        group.sample_size(value);
+    }
 
     let mut builder = Fs::default();
     builder.root("/");
@@ -87,6 +112,7 @@ fn bench_parquet_async(c: &mut Criterion) {
         runtime,
         print_metrics: config.print_metrics,
     };
+    let parquet_name = bench_file_name(&config.parquet_path);
     let bench = ParquetAsyncBench::new(
         operator.clone(),
         config.parquet_path.clone(),
@@ -94,7 +120,7 @@ fn bench_parquet_async(c: &mut Criterion) {
     )
     .with_columns(config.columns.clone());
     group.bench_with_input(
-        BenchmarkId::new("scan_stream_async", config.parquet_path.clone()),
+        BenchmarkId::new("scan_stream_async", parquet_name.clone()),
         &(bench, ctx.clone()),
         bench_parquet_async_iter,
     );
@@ -107,8 +133,24 @@ fn bench_parquet_async(c: &mut Criterion) {
     .with_columns(config.columns.clone())
     .with_async_trait(true);
     group.bench_with_input(
-        BenchmarkId::new("scan_reader_async", config.parquet_path),
-        &(bench, ctx),
+        BenchmarkId::new("scan_reader_async", parquet_name.clone()),
+        &(bench, ctx.clone()),
+        bench_parquet_async_iter,
+    );
+
+    let bench = ParquetAsyncBench::new(
+        operator.clone(),
+        config.parquet_path.clone(),
+        config.scan_batch_size,
+    )
+    .with_columns(config.columns.clone())
+    .with_row_groups(config.row_groups.clone());
+    group.bench_with_input(
+        BenchmarkId::new(
+            "scan_row_group_async",
+            format!("{}/{:?}", parquet_name, config.row_groups),
+        ),
+        &(bench, ctx.clone()),
         bench_parquet_async_iter,
     );
 

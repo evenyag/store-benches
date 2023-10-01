@@ -19,6 +19,7 @@ pub struct ParquetAsyncBench {
     batch_size: usize,
     columns: Vec<usize>,
     use_async_trait: bool,
+    row_groups: Vec<usize>,
 }
 
 impl ParquetAsyncBench {
@@ -29,6 +30,7 @@ impl ParquetAsyncBench {
             batch_size,
             columns: Vec::new(),
             use_async_trait: false,
+            row_groups: Vec::new(),
         }
     }
 
@@ -39,6 +41,11 @@ impl ParquetAsyncBench {
 
     pub fn with_async_trait(mut self, use_async_trait: bool) -> Self {
         self.use_async_trait = use_async_trait;
+        self
+    }
+
+    pub fn with_row_groups(mut self, row_groups: Vec<usize>) -> Self {
+        self.row_groups = row_groups;
         self
     }
 
@@ -68,6 +75,11 @@ impl ParquetAsyncBench {
                 self.columns.clone(),
             ));
         }
+        let mut num_row_groups = builder.metadata().num_row_groups();
+        if !self.row_groups.is_empty() {
+            num_row_groups = self.row_groups.len();
+            builder = builder.with_row_groups(self.row_groups.clone());
+        }
 
         let mut stream = builder.build().unwrap();
         let build_cost = start.elapsed();
@@ -93,6 +105,7 @@ impl ParquetAsyncBench {
             scan_cost,
             num_rows,
             num_columns,
+            num_row_groups,
         }
     }
 }
