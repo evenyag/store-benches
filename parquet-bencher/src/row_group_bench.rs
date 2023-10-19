@@ -4,10 +4,13 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use arrow_schema::Fields;
 use bytes::{Buf, Bytes};
 use parquet::arrow::arrow_reader::{ParquetRecordBatchReader, RowGroups, RowSelection};
 use parquet::arrow::async_reader::AsyncFileReader;
-use parquet::arrow::{parquet_to_arrow_field_levels, ProjectionMask};
+use parquet::arrow::{
+    parquet_to_arrow_field_levels, ParquetRecordBatchStreamBuilder, ProjectionMask,
+};
 use parquet::column::page::{Page, PageIterator, PageMetadata, PageReader};
 use parquet::errors::{ParquetError, Result};
 use parquet::file::metadata::RowGroupMetaData;
@@ -66,11 +69,13 @@ impl ParquetRowGroupBench {
     pub async fn run(&self) -> Metrics {
         let start = Instant::now();
 
+        let file = File::open(&self.file_path).await.unwrap();
+        let builder = ParquetRecordBatchStreamBuilder::new(file).await.unwrap();
+        let metadata = builder.metadata();
         let mut file = File::open(&self.file_path).await.unwrap();
 
         let open_cost = start.elapsed();
 
-        let metadata = file.get_metadata().await.unwrap();
         let parquet_schema_desc = metadata.file_metadata().schema_descr_ptr();
         let num_columns = parquet_schema_desc.num_columns();
         let num_row_groups = metadata.num_row_groups();
@@ -89,7 +94,9 @@ impl ParquetRowGroupBench {
             rowgroup.async_fetch_data(&mut file, None).await.unwrap();
             fetch_cost += start.elapsed();
             let start = Instant::now();
-            let reader = rowgroup.build_reader(self.batch_size, None).unwrap();
+            let reader = rowgroup
+                .build_reader(self.batch_size, None, Some(builder.schema().fields()))
+                .unwrap();
             build_reader_cost += start.elapsed();
 
             let start = Instant::now();
@@ -265,11 +272,12 @@ impl InMemoryRowGroup {
         &self,
         batch_size: usize,
         selection: Option<RowSelection>,
+        hint: Option<&Fields>,
     ) -> Result<ParquetRecordBatchReader> {
         let levels = parquet_to_arrow_field_levels(
             &self.metadata.schema_descr_ptr(),
             self.mask.clone(),
-            None,
+            hint,
         )?;
 
         ParquetRecordBatchReader::try_new_with_row_groups(&levels, self, batch_size, selection)
