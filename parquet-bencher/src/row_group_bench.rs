@@ -1,6 +1,6 @@
 //! Parquet row group benchmark.
 
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -35,6 +35,7 @@ pub struct Metrics {
     pub build_reader_cost: Duration,
     /// Total cost to get pages.
     pub get_page_cost: Duration,
+    pub page_total_size: usize,
     pub read_batch_cost: Duration,
 }
 
@@ -86,10 +87,10 @@ impl ParquetRowGroupBench {
         let mut fetch_cost = Duration::ZERO;
         let mut build_reader_cost = Duration::ZERO;
         let mut read_batch_cost = Duration::ZERO;
-        let get_page_cost = Arc::new(AtomicU64::new(0));
+        let reader_metrics = Arc::new(PageReaderMetrics::default());
         for rg in metadata.row_groups() {
             let mut rowgroup =
-                InMemoryRowGroup::create(rg.clone(), ProjectionMask::all(), get_page_cost.clone());
+                InMemoryRowGroup::create(rg.clone(), ProjectionMask::all(), reader_metrics.clone());
             let start = Instant::now();
             rowgroup.async_fetch_data(&mut file, None).await.unwrap();
             fetch_cost += start.elapsed();
@@ -108,7 +109,8 @@ impl ParquetRowGroupBench {
         }
         let scan_cost = start.elapsed();
         let get_page_cost =
-            Duration::from_nanos(get_page_cost.load(std::sync::atomic::Ordering::Relaxed));
+            Duration::from_nanos(reader_metrics.get_page_cost.load(Ordering::Relaxed));
+        let page_total_size = reader_metrics.page_total_size.load(Ordering::Relaxed);
 
         Metrics {
             open_cost,
@@ -120,6 +122,7 @@ impl ParquetRowGroupBench {
             fetch_cost,
             build_reader_cost,
             get_page_cost,
+            page_total_size,
             read_batch_cost,
         }
     }
@@ -172,16 +175,26 @@ impl ChunkReader for ColumnChunkData {
     }
 }
 
+#[derive(Default)]
+struct PageReaderMetrics {
+    get_page_cost: AtomicU64,
+    page_total_size: AtomicUsize,
+}
+
 struct PageReaderImpl<R: ChunkReader> {
     page_reader: SerializedPageReader<R>,
-    get_page_cost: Arc<AtomicU64>,
+    metrics: Arc<PageReaderMetrics>,
+    get_page_cost: Duration,
+    page_total_size: usize,
 }
 
 impl<R: ChunkReader> PageReaderImpl<R> {
-    fn new(page_reader: SerializedPageReader<R>, get_page_cost: Arc<AtomicU64>) -> Self {
+    fn new(page_reader: SerializedPageReader<R>, metrics: Arc<PageReaderMetrics>) -> Self {
         Self {
             page_reader,
-            get_page_cost,
+            metrics,
+            get_page_cost: Duration::ZERO,
+            page_total_size: 0,
         }
     }
 }
@@ -198,20 +211,30 @@ impl<R: ChunkReader> PageReader for PageReaderImpl<R> {
     fn get_next_page(&mut self) -> Result<Option<Page>> {
         let start = Instant::now();
         let ret = self.page_reader.get_next_page();
-        let cost = start.elapsed().as_nanos();
-        self.get_page_cost
-            .fetch_add(cost as u64, std::sync::atomic::Ordering::Relaxed);
+        self.get_page_cost += start.elapsed();
+        if let Ok(Some(page)) = &ret {
+            self.page_total_size += page.buffer().len();
+        }
         ret
     }
 
     fn peek_next_page(&mut self) -> Result<Option<PageMetadata>> {
-        println!("peek_next_page");
         self.page_reader.peek_next_page()
     }
 
     fn skip_next_page(&mut self) -> Result<()> {
-        println!("skip_next_page");
         self.page_reader.skip_next_page()
+    }
+}
+
+impl<R: ChunkReader> Drop for PageReaderImpl<R> {
+    fn drop(&mut self) {
+        self.metrics
+            .get_page_cost
+            .fetch_add(self.get_page_cost.as_nanos() as u64, Ordering::Relaxed);
+        self.metrics
+            .page_total_size
+            .fetch_add(self.page_total_size, Ordering::Relaxed);
     }
 }
 
@@ -220,7 +243,7 @@ pub struct InMemoryRowGroup {
     pub metadata: RowGroupMetaData,
     mask: ProjectionMask,
     column_chunks: Vec<Option<Arc<ColumnChunkData>>>,
-    get_page_cost: Arc<AtomicU64>,
+    reader_metrics: Arc<PageReaderMetrics>,
 }
 
 impl RowGroups for InMemoryRowGroup {
@@ -241,7 +264,7 @@ impl RowGroups for InMemoryRowGroup {
                         self.num_rows(),
                         None,
                     )?,
-                    self.get_page_cost.clone(),
+                    self.reader_metrics.clone(),
                 ));
 
                 Ok(Box::new(ColumnChunkIterator {
@@ -253,10 +276,10 @@ impl RowGroups for InMemoryRowGroup {
 }
 
 impl InMemoryRowGroup {
-    pub fn create(
+    fn create(
         metadata: RowGroupMetaData,
         mask: ProjectionMask,
-        get_page_cost: Arc<AtomicU64>,
+        reader_metrics: Arc<PageReaderMetrics>,
     ) -> Self {
         let column_chunks = metadata.columns().iter().map(|_| None).collect::<Vec<_>>();
 
@@ -264,11 +287,11 @@ impl InMemoryRowGroup {
             metadata,
             mask,
             column_chunks,
-            get_page_cost,
+            reader_metrics,
         }
     }
 
-    pub fn build_reader(
+    fn build_reader(
         &self,
         batch_size: usize,
         selection: Option<RowSelection>,
@@ -284,7 +307,7 @@ impl InMemoryRowGroup {
     }
 
     /// fetch data from a reader in sync mode
-    pub async fn async_fetch_data<R: AsyncFileReader>(
+    async fn async_fetch_data<R: AsyncFileReader>(
         &mut self,
         reader: &mut R,
         _selection: Option<&RowSelection>,
