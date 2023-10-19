@@ -8,6 +8,7 @@ use opendal::Operator;
 use parquet_bencher::config::BenchConfig;
 use parquet_bencher::parquet_async_bench::ParquetAsyncBench;
 use parquet_bencher::parquet_bench::ParquetBench;
+use parquet_bencher::row_group_bench::ParquetRowGroupBench;
 use tokio::runtime::Runtime;
 
 const BENCH_CONFIG_KEY: &str = "BENCH_CONFIG";
@@ -154,6 +155,16 @@ fn bench_parquet_async_iter(b: &mut Bencher<'_>, bench: &(ParquetAsyncBench, Asy
     })
 }
 
+fn bench_async_row_group_iter(
+    b: &mut Bencher<'_>,
+    bench: &(ParquetRowGroupBench, AsyncBenchContext),
+) {
+    b.iter(|| {
+        let metrics = bench.1.runtime.block_on(async { bench.0.run().await });
+        bench.1.maybe_print_metrics(&metrics);
+    })
+}
+
 fn bench_parquet_async(c: &mut Criterion) {
     let config = init_bench();
 
@@ -238,10 +249,20 @@ fn bench_parquet_async(c: &mut Criterion) {
                     selection.row_count()
                 ),
             ),
-            &(bench, ctx),
+            &(bench, ctx.clone()),
             bench_parquet_async_iter,
         );
     }
+
+    // Row group bench.
+    let bench = ParquetRowGroupBench::new(config.parquet_path.clone(), config.scan_batch_size)
+        .with_columns(config.columns.clone())
+        .with_row_groups(config.row_groups.clone());
+    group.bench_with_input(
+        BenchmarkId::new("scan_async_row_group", parquet_name),
+        &(bench, ctx),
+        bench_async_row_group_iter,
+    );
 
     group.finish();
 }
