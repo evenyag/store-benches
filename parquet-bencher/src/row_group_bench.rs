@@ -88,9 +88,14 @@ impl ParquetRowGroupBench {
         let mut build_reader_cost = Duration::ZERO;
         let mut read_batch_cost = Duration::ZERO;
         let reader_metrics = Arc::new(PageReaderMetrics::default());
+        let mask = if self.columns.is_empty() {
+            ProjectionMask::all()
+        } else {
+            ProjectionMask::roots(&parquet_schema_desc, self.columns.iter().copied())
+        };
         for rg in metadata.row_groups() {
             let mut rowgroup =
-                InMemoryRowGroup::create(rg.clone(), ProjectionMask::all(), reader_metrics.clone());
+                InMemoryRowGroup::create(rg.clone(), mask.clone(), reader_metrics.clone());
             let start = Instant::now();
             rowgroup.async_fetch_data(&mut file, None).await.unwrap();
             fetch_cost += start.elapsed();
