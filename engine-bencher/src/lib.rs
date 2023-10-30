@@ -18,4 +18,5 @@ pub mod memory;
 pub mod memtable;
 pub mod put_bench;
 pub mod scan_bench;
+pub mod sst_reader_bench;
 pub mod target;

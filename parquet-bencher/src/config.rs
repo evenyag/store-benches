@@ -4,30 +4,60 @@ use std::fs::File;
 use std::io::Read;
 use std::time::Duration;
 
+use parquet::arrow::arrow_reader::{RowSelection, RowSelector};
 use serde::Deserialize;
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct RowSelectionConfig {
+    row_counts: Vec<usize>,
+    skips: Vec<bool>,
+}
+
+impl RowSelectionConfig {
+    pub fn to_selection(&self) -> RowSelection {
+        let selectors: Vec<_> = self
+            .row_counts
+            .iter()
+            .zip(&self.skips)
+            .map(|(count, skip)| RowSelector {
+                row_count: *count,
+                skip: *skip,
+            })
+            .collect();
+        RowSelection::from(selectors)
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct BenchConfig {
     pub parquet_path: String,
     #[serde(with = "humantime_serde")]
-    pub measurement_time: Duration,
-    pub sample_size: usize,
+    pub measurement_time: Option<Duration>,
+    pub sample_size: Option<usize>,
     pub scan_batch_size: usize,
-    pub print_metrics: bool,
+    /// Print metrics after N iterations. 0 to disable metrics.
+    pub print_metrics_every: usize,
     /// Index of columns to read, empty for all columns.
     pub columns: Vec<usize>,
+    /// Index of row groups to read, empty for all row groups.
+    pub row_groups: Vec<usize>,
+    /// Row selections.
+    pub selection: Option<RowSelectionConfig>,
 }
 
 impl Default for BenchConfig {
     fn default() -> BenchConfig {
         BenchConfig {
             parquet_path: "".to_string(),
-            measurement_time: Duration::from_secs(30),
-            sample_size: 30,
+            measurement_time: None,
+            sample_size: None,
             scan_batch_size: 1024,
-            print_metrics: false,
+            print_metrics_every: 0,
             columns: Vec::new(),
+            row_groups: Vec::new(),
+            selection: None,
         }
     }
 }

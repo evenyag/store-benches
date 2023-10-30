@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use common_telemetry::logging;
+use tokio::sync::Mutex;
 
 use crate::loader::ParquetLoader;
 use crate::target::{ScanMetrics, Target};
@@ -21,7 +22,7 @@ use crate::target::{ScanMetrics, Target};
 pub struct ScanBench {
     loader: ParquetLoader,
     target: Target,
-    loaded: bool,
+    loaded: Mutex<bool>,
     scan_batch_size: usize,
 }
 
@@ -31,21 +32,22 @@ impl ScanBench {
         ScanBench {
             loader,
             target,
-            loaded: false,
+            loaded: Mutex::new(false),
             scan_batch_size,
         }
     }
 
     /// Prepare test data if the target contains a new region.
-    pub async fn maybe_prepare_data(&mut self) {
-        if self.target.is_new_region() && !self.loaded {
+    pub async fn maybe_prepare_data(&self) {
+        let mut loaded = self.loaded.lock().await;
+        if self.target.is_new_region() && !*loaded {
             logging::info!("Load data to target");
 
             let metrics = self.loader.load_to_target(&self.target).await;
 
             logging::info!("Finish loading data, metrics: {:?}", metrics);
 
-            self.loaded = true;
+            *loaded = true;
         }
 
         logging::info!("region already exists, don't load again");

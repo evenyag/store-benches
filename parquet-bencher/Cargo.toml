@@ -19,9 +19,10 @@ arrow-row.workspace = true
 arrow-schema.workspace = true
 async-compat = "0.2"
 async-trait = "0.1"
+bytes = "1"
 futures-util.workspace = true
 humantime-serde.workspace = true
-opendal = "0.30"
+opendal.workspace = true
 parquet = { workspace = true, features = ["async"] }
 tokio.workspace = true
 toml.workspace = true

@@ -6,3 +6,4 @@ mod errors;
 pub mod parameter;
 pub mod parquet_async_bench;
 pub mod parquet_bench;
+pub mod row_group_bench;

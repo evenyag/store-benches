@@ -16,14 +16,16 @@ use std::fs;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use common_telemetry::logging;
-use datatypes::arrow::record_batch::RecordBatchReader;
+use common_telemetry::{info, logging, warn};
+use datatypes::arrow::record_batch::{RecordBatch, RecordBatchReader};
 use futures_util::future::join_all;
-use futures_util::StreamExt;
+use mito2::config::MitoConfig;
 use storage::config::EngineConfig;
+use store_api::storage::RegionId;
+use tokio::task::spawn_blocking;
 
 use crate::loader::ParquetLoader;
-use crate::target::Target;
+use crate::target::{MitoTarget, StorageTarget, Target};
 
 /// Metrics during putting data.
 #[derive(Debug)]
@@ -41,17 +43,27 @@ pub struct PutBench {
     loader: ParquetLoader,
     path: String,
     engine_config: EngineConfig,
+    mito_config: MitoConfig,
     put_workers: usize,
+    run_mito: bool,
 }
 
 impl PutBench {
     /// Creates a new scan benchmark.
-    pub fn new(loader: ParquetLoader, path: String, engine_config: EngineConfig) -> PutBench {
+    pub fn new(
+        loader: ParquetLoader,
+        path: String,
+        engine_config: EngineConfig,
+        mito_config: MitoConfig,
+        run_mito: bool,
+    ) -> PutBench {
         PutBench {
             loader,
             path,
             engine_config,
+            mito_config,
             put_workers: 1,
+            run_mito,
         }
     }
 
@@ -76,21 +88,38 @@ impl PutBench {
             self.put_workers
         };
 
+        info!("worker num is {}", put_workers);
+
         // Spawn multiple tasks to put.
-        let (tx, rx) = flume::bounded(64);
+        let (tx, rx) = async_channel::bounded(64);
         let mut handles = Vec::with_capacity(self.put_workers);
-        for _ in 0..put_workers {
-            let rx = rx.clone();
+        for worker_id in 0..put_workers {
+            let rx: async_channel::Receiver<RecordBatch> = rx.clone();
             let target = target.clone();
             let handle = tokio::spawn(async move {
-                let mut stream = rx.into_stream();
                 let mut put_cost = Duration::ZERO;
+                let mut worker_rows = 0;
                 // Each worker receive batch from the channel.
-                while let Some(batch) = stream.next().await {
+                let mut batch_id = 0;
+                while let Ok(batch) = rx.recv().await {
                     let put_start = Instant::now();
+                    worker_rows += batch.num_rows();
                     target.write(batch).await;
-                    put_cost += put_start.elapsed();
+                    let put_elapsed = put_start.elapsed();
+                    put_cost += put_elapsed;
+                    if put_elapsed > Duration::from_secs(1) {
+                        warn!(
+                            "worker {} put batch {} cost {:?} > 1s",
+                            worker_id, batch_id, put_elapsed
+                        );
+                    }
+                    batch_id += 1;
                 }
+
+                info!(
+                    "worker {} is finished, totol_rows: {}, put_cost: {:?}",
+                    worker_id, worker_rows, put_cost,
+                );
 
                 put_cost
             });
@@ -99,16 +128,20 @@ impl PutBench {
         }
 
         // Send batch to the channel.
-        let num_rows = tokio::task::block_in_place(|| {
+        let h = spawn_blocking(move || {
             let mut num_rows = 0;
             for batch in reader {
                 let batch = batch.unwrap();
                 num_rows += batch.num_rows();
 
-                tx.send(batch).unwrap();
+                tx.send_blocking(batch).unwrap();
             }
+            tx.close();
             num_rows
         });
+        let num_rows = h.await.unwrap();
+
+        info!("reader finished, totol_rows: {}", num_rows);
 
         let put_cost = join_all(handles)
             .await
@@ -117,6 +150,8 @@ impl PutBench {
             .sum();
 
         let load_cost = run_start.elapsed();
+
+        info!("Run one put bench finished");
 
         target.shutdown().await;
 
@@ -153,6 +188,14 @@ impl PutBench {
         self.maybe_clean_data();
 
         // Use 1 as region id.
-        Target::new(&self.path, self.engine_config.clone(), 1.into()).await
+        let region_id = RegionId::from(1);
+        if self.run_mito {
+            let target = MitoTarget::new(&self.path, self.mito_config.clone(), region_id).await;
+            Target::Mito(target)
+        } else {
+            let target =
+                StorageTarget::new(&self.path, self.engine_config.clone(), region_id).await;
+            Target::Storage(target)
+        }
     }
 }
