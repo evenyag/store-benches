@@ -82,7 +82,7 @@ impl Memtable for PlainVectorMemtable {
             .map(|v| v.to_arrow_array())
             .collect::<Vec<_>>();
 
-        let mut converter = RowConverter::new(fields).unwrap();
+        let converter = RowConverter::new(fields).unwrap();
         let rows = converter.convert_columns(&key_cols).unwrap();
 
         rows.iter().enumerate().for_each(|(idx, row)| {
@@ -349,7 +349,7 @@ fn sort_in_time_series(
     sequence_vector: Arc<UInt64Vector>,
     op_type_vector: Arc<UInt8Vector>,
 ) -> UInt32Vector {
-    let mut row_converter = RowConverter::new(vec![
+    let row_converter = RowConverter::new(vec![
         SortField::new(ts_vector.data_type().as_arrow_type()),
         SortField::new(arrow::datatypes::DataType::UInt64),
         SortField::new(arrow::datatypes::DataType::UInt8),

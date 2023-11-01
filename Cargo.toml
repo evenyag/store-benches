@@ -13,28 +13,29 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-arrow-array = "43"
-arrow-row = "43"
-arrow-schema = "43"
-api = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
-common-base = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
-common-config = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
-common-runtime = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
-common-telemetry = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
-common-time = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
-datatypes = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
+arrow-array = "47"
+arrow-row = "47"
+arrow-schema = "47"
+# branch: bench/mito2
+api = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
+common-base = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
+common-config = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
+common-runtime = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
+common-telemetry = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
+common-time = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
+datatypes = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
 futures-util = "0.3"
 humantime-serde = "1"
-log-store = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
-mito2 = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
-object-store = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
+log-store = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
+mito2 = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
+object-store = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
 opendal = { git = "https://github.com/apache/incubator-opendal.git", rev = "7d5524f35f29f7eda8131e8b0873590b7cbe34ab", features = [
     "layers-tracing",
     "layers-metrics",
 ] }
-parquet = "43"
+parquet = "47"
 serde = { version = "1", features = ["derive"] }
-storage = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
-store-api = { git = "https://github.com/evenyag/greptimedb", rev = "364eed91363de81552feae1504ef9461a3c76318" }
+storage = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
+store-api = { git = "https://github.com/evenyag/greptimedb", rev = "42257dba62d846ff97067570bed0bed3a3ba9964" }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 toml = "0.7"

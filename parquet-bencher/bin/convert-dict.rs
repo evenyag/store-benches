@@ -155,9 +155,9 @@ fn pk_batch(batch: RecordBatch, output_schema: SchemaRef, enable_pk_dict: bool) 
         .filter(|array| *array.data_type() == DataType::Utf8)
         .cloned()
         .collect();
-    let sort_field = SortField::new(DataType::Utf8).preserve_dictionaries(false);
+    let sort_field = SortField::new(DataType::Utf8);
 
-    let mut converter = RowConverter::new(vec![sort_field; key_columns.len()]).unwrap();
+    let converter = RowConverter::new(vec![sort_field; key_columns.len()]).unwrap();
     let rows = converter.convert_columns(&key_columns).unwrap();
 
     let mut pk_array: ArrayRef = Arc::new(BinaryArray::from_iter_values(rows.iter()));

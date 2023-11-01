@@ -33,7 +33,8 @@ use futures_util::TryStreamExt;
 use log_store::raft_engine::log_store::RaftEngineLogStore;
 use mito2::config::MitoConfig;
 use mito2::engine::MitoEngine;
-use object_store::layers::{LoggingLayer, MetricsLayer, TracingLayer};
+use object_store::layers::LoggingLayer;
+use object_store::manager::ObjectStoreManager;
 use object_store::services::Fs;
 use object_store::{util, ObjectStore};
 use storage::compaction::{CompactionHandler, CompactionSchedulerRef};
@@ -69,16 +70,11 @@ async fn new_fs_object_store(path: &str) -> ObjectStore {
     let mut builder = Fs::default();
     builder.root(&data_dir).atomic_write_dir(&atomic_write_dir);
 
-    ObjectStore::new(builder)
-        .unwrap()
-        .finish()
-        .layer(MetricsLayer)
-        .layer(
-            LoggingLayer::default()
-                .with_error_level(Some("debug"))
-                .unwrap(),
-        )
-        .layer(TracingLayer)
+    ObjectStore::new(builder).unwrap().finish().layer(
+        LoggingLayer::default()
+            .with_error_level(Some("debug"))
+            .unwrap(),
+    )
 }
 
 /// Returns a new log store.
@@ -86,6 +82,7 @@ async fn new_log_store(path: &str) -> RaftEngineLogStore {
     // create WAL directory
     fs::create_dir_all(Path::new(path)).unwrap();
     let log_config = WalConfig {
+        dir: None,
         file_size: ReadableSize::gb(1),
         purge_threshold: ReadableSize::gb(10),
         purge_interval: Duration::from_secs(600),
@@ -248,7 +245,11 @@ async fn new_mito_engine(path: &str, config: MitoConfig) -> MitoEngine {
 
     let object_store = new_fs_object_store(&data_dir).await;
     let log_store = Arc::new(new_log_store(&wal_dir).await);
-    MitoEngine::new(config, log_store, object_store)
+    MitoEngine::new(
+        config,
+        log_store,
+        Arc::new(ObjectStoreManager::new("default", object_store)),
+    )
 }
 
 /// Returns the region name.
@@ -398,7 +399,9 @@ fn record_batch_to_put_request(batch: RecordBatch) -> RegionPutRequest {
         }
         rows.push(Row { values });
     }
-    RegionPutRequest::new(Rows { schema, rows })
+    RegionPutRequest {
+        rows: Rows { schema, rows },
+    }
 }
 
 /// Metrics of scanning a region.
@@ -584,17 +587,13 @@ impl MitoTarget {
     pub async fn write(&self, batch: RecordBatch) {
         let start = Instant::now();
         let request = record_batch_to_put_request(batch);
-        let req_id = request.req_id;
         self.engine
             .handle_request(self.region_id, RegionRequest::Put(request))
             .await
             .unwrap();
         let cost = start.elapsed();
         if cost > Duration::from_millis(200) {
-            warn!(
-                "request {} put cost is too larger {:?} > 200ms",
-                req_id, cost
-            );
+            warn!("request put cost is too larger {:?} > 200ms", cost);
         }
     }
 

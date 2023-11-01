@@ -126,7 +126,7 @@ impl SeriesMemtable {
             columns.push(v.to_arrow_array());
         }
 
-        let mut converter = RowConverter::new(fields).unwrap();
+        let converter = RowConverter::new(fields).unwrap();
         let rows = converter.convert_columns(&columns).unwrap();
         let mut to_sort: Vec<_> = rows
             .iter()
