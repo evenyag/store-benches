@@ -38,6 +38,9 @@ struct Args {
     /// Enable Zstd compression.
     #[arg(long, default_value_t = false)]
     zstd: bool,
+    /// Enable Lz4 compression.
+    #[arg(long, default_value_t = false)]
+    lz4: bool,
 }
 
 fn main() {
@@ -94,6 +97,10 @@ fn convert_to_dict(args: &Args) {
     if args.zstd {
         println!("Use zstd compression");
         builder = builder.set_compression(parquet::basic::Compression::ZSTD(ZstdLevel::default()));
+    }
+    if args.lz4 {
+        println!("Use lz4 compression");
+        builder = builder.set_compression(parquet::basic::Compression::LZ4);
     }
     let write_props = builder.build();
     let mut writer =
