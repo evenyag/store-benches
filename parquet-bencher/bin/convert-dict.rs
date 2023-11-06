@@ -8,6 +8,7 @@ use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use clap::Parser;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
+use parquet::basic::ZstdLevel;
 use parquet::file::properties::WriterProperties;
 
 #[derive(Parser, Debug)]
@@ -34,6 +35,9 @@ struct Args {
     /// Output data page size.
     #[arg(long)]
     data_page_size: Option<usize>,
+    /// Enable Zstd compression.
+    #[arg(long, default_value_t = false)]
+    zstd: bool,
 }
 
 fn main() {
@@ -74,7 +78,10 @@ fn convert_to_dict(args: &Args) {
     } else {
         dict_schema(&input_schema)
     };
-    println!("input_schema is {:?}, output schema is {:?}", input_schema, output_schema);
+    println!(
+        "input_schema is {:?}, output schema is {:?}",
+        input_schema, output_schema
+    );
     let mut builder = WriterProperties::builder().set_key_value_metadata(key_value_metadata);
     if let Some(value) = row_group_size {
         println!("output row group size: {}", value);
@@ -83,6 +90,10 @@ fn convert_to_dict(args: &Args) {
     if let Some(value) = data_page_size {
         println!("output data page size: {}", value);
         builder = builder.set_data_page_size_limit(value);
+    }
+    if args.zstd {
+        println!("Use zstd compression");
+        builder = builder.set_compression(parquet::basic::Compression::ZSTD(ZstdLevel::default()));
     }
     let write_props = builder.build();
     let mut writer =
