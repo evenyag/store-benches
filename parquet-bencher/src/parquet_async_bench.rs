@@ -74,6 +74,7 @@ impl ParquetAsyncBench {
             .await
             .unwrap()
             .with_batch_size(self.batch_size);
+        let new_builder_cost = start.elapsed();
         let parquet_schema_desc = builder.metadata().file_metadata().schema_descr_ptr();
         let mut num_columns = parquet_schema_desc.num_columns();
         if !self.columns.is_empty() {
@@ -112,6 +113,7 @@ impl ParquetAsyncBench {
 
         Metrics {
             open_cost,
+            new_builder_cost,
             build_cost,
             scan_cost,
             num_rows,

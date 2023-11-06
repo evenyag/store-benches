@@ -21,16 +21,19 @@ struct Args {
     output: String,
     /// Output row group size.
     #[arg(long)]
-    row_group_size: usize,
+    row_group_size: Option<usize>,
     /// Convert tags to primary key.
     #[arg(long, default_value_t = false)]
     to_pk: bool,
     /// Use dictionary for primary key.
     #[arg(long, default_value_t = false)]
     enable_pk_dict: bool,
-    /// Does nothing.
+    /// Does nothing to each batch.
     #[arg(long, default_value_t = false)]
     raw: bool,
+    /// Output data page size.
+    #[arg(long)]
+    data_page_size: Option<usize>,
 }
 
 fn main() {
@@ -44,12 +47,18 @@ fn convert_to_dict(args: &Args) {
     let input_path = &args.input;
     let output_path = &args.output;
     let row_group_size = args.row_group_size;
+    let data_page_size = args.data_page_size;
 
     let input_file = std::fs::OpenOptions::new()
         .read(true)
         .open(input_path)
         .unwrap();
     let input_builder = ParquetRecordBatchReaderBuilder::try_new(input_file).unwrap();
+    let key_value_metadata = input_builder
+        .metadata()
+        .file_metadata()
+        .key_value_metadata()
+        .cloned();
     let mut reader = input_builder.build().unwrap();
     let input_schema = reader.schema();
 
@@ -65,10 +74,17 @@ fn convert_to_dict(args: &Args) {
     } else {
         dict_schema(&input_schema)
     };
-    println!("output schema is {:?}", output_schema);
-    let write_props = WriterProperties::builder()
-        .set_max_row_group_size(row_group_size)
-        .build();
+    println!("input_schema is {:?}, output schema is {:?}", input_schema, output_schema);
+    let mut builder = WriterProperties::builder().set_key_value_metadata(key_value_metadata);
+    if let Some(value) = row_group_size {
+        println!("output row group size: {}", value);
+        builder = builder.set_max_row_group_size(value);
+    }
+    if let Some(value) = data_page_size {
+        println!("output data page size: {}", value);
+        builder = builder.set_data_page_size_limit(value);
+    }
+    let write_props = builder.build();
     let mut writer =
         ArrowWriter::try_new(output_file, output_schema.clone(), Some(write_props)).unwrap();
 

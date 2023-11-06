@@ -9,6 +9,8 @@ use parquet::arrow::arrow_reader::{ParquetRecordBatchReaderBuilder, RowSelection
 pub struct Metrics {
     /// Cost to open the file.
     pub open_cost: Duration,
+    /// Cost to create the builder.
+    pub new_builder_cost: Duration,
     /// Cost to build the reader.
     pub build_cost: Duration,
     /// Total cost of reading the file (including other costs).
@@ -61,6 +63,7 @@ impl ParquetBench {
         let mut builder = ParquetRecordBatchReaderBuilder::try_new(file)
             .unwrap()
             .with_batch_size(self.batch_size);
+        let new_builder_cost = start.elapsed();
         let parquet_schema_desc = builder.metadata().file_metadata().schema_descr_ptr();
         let mut num_columns = parquet_schema_desc.num_columns();
         if !self.columns.is_empty() {
@@ -91,6 +94,7 @@ impl ParquetBench {
 
         Metrics {
             open_cost,
+            new_builder_cost,
             build_cost,
             scan_cost,
             num_rows,

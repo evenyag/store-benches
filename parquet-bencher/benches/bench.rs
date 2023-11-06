@@ -259,7 +259,7 @@ fn bench_parquet_async(c: &mut Criterion) {
         .with_columns(config.columns.clone())
         .with_row_groups(config.row_groups.clone());
     group.bench_with_input(
-        BenchmarkId::new("scan_async_row_group", parquet_name),
+        BenchmarkId::new("scan_async_by_group", parquet_name),
         &(bench, ctx),
         bench_async_row_group_iter,
     );
